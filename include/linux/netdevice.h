@@ -1961,6 +1961,7 @@ struct net_device {
 	spinlock_t		addr_list_lock;
 	unsigned char		name_assign_type;
 	bool			uc_promisc;
+	bool			napi_threaded;
 	struct netdev_hw_addr_list	uc;
 	struct netdev_hw_addr_list	mc;
 	struct netdev_hw_addr_list	dev_addrs;
