@@ -39,6 +39,7 @@ Contents:
    checksum-offloads
    segmentation-offloads
    scaling
+   hstats
 
 .. only::  subproject
 

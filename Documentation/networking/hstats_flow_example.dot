@@ -1,0 +1,11 @@
+digraph L {
+  node [shape=record];
+  rankdir=RL;
+
+  a  [label="Device\n\nbasic ingress\nstats",color=blue]
+  b  [label="Device\n\nper-priority\nstats",color=blue]
+  c  [label="Device\n\nper-queue\nPCI interface\nstats",color=blue]
+  d  [label="Host\n\nper-queue\nstats",color=forestgreen]
+
+  a -> b -> c -> d
+}
