@@ -3532,6 +3532,7 @@ const struct net_device_ops nfp_net_netdev_ops = {
 	.ndo_bpf		= nfp_net_xdp,
 	.ndo_get_port_parent_id	= nfp_port_get_port_parent_id,
 	.ndo_get_devlink	= nfp_devlink_get_devlink,
+	.ndo_hstat_get_groups	= nfp_net_hstat_get_groups,
 };
 
 /**

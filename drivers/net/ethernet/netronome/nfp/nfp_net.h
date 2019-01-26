@@ -105,6 +105,7 @@ struct nfp_eth_table_port;
 struct nfp_net;
 struct nfp_net_r_vector;
 struct nfp_port;
+struct rtnl_hstat_req;
 
 /* Convenience macro for wrapping descriptor index on ring size */
 #define D_IDX(ring, idx)	((idx) & ((ring)->cnt - 1))
@@ -910,4 +911,6 @@ static inline void nfp_net_debugfs_dir_clean(struct dentry **dir)
 }
 #endif /* CONFIG_NFP_DEBUG */
 
+int nfp_net_hstat_get_groups(const struct net_device *dev,
+			     struct rtnl_hstat_req *req);
 #endif /* _NFP_NET_H_ */
