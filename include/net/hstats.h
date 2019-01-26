@@ -37,18 +37,24 @@ struct rtnl_hstat_qualifier {
 /**
  * struct rtnl_hstat_group - node in the hstat hierarchy
  * @qualifiers:	attributes describing this group
+ * @has_children: @children array is present and NULL-terminated
  * @stats_cnt:	number of stats in the bitmask
  * @stats:	bitmask of stats present
  * @get_stats:	driver callback for dumping the stats
+ * @children:	NULL-terminated array of groups inheriting the qualifiers
+ *		@has_children has to be set for core to parse the array
  */
 struct rtnl_hstat_group {
 	/* Note: this is *not* indexed with IFLA_* attributes! */
 	struct rtnl_hstat_qualifier qualifiers[RTNL_HSTATS_QUAL_CNT];
+	bool has_children;
 	/* Can't use bitmaps - words are variable length */
 	unsigned int stats_cnt;
 	u64 stats[DIV_ROUND_UP(IFLA_HSTATS_STAT_MAX + 1, 64)];
 	int (*get_stats)(struct net_device *dev, struct rtnl_hstat_req *req,
 			 const struct rtnl_hstat_group *grp);
+
+	const struct rtnl_hstat_group *children[];
 };
 
 void rtnl_hstat_add_grp(struct rtnl_hstat_req *req,

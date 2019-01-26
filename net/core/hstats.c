@@ -31,6 +31,10 @@ enum hstat_dumper_cmd {
 	 */
 	HSTAT_DCMD_GRP_LOAD,
 	/* dump all statitics
+	 *   ---------------
+	 *  |  LOAD child0  |
+	 *  |  LOAD child1  |
+	 *   ===============
 	 */
 	HSTAT_DCMD_GRP_DUMP,
 	/* close grp */
@@ -352,6 +356,16 @@ static int hstat_dumper_grp_dump(struct hstat_dumper *dumper)
 	err = hstat_dumper_grp_put_stats(dumper, cmd.grp);
 	if (err)
 		return err;
+
+	if (cmd.grp->has_children) {
+		const struct rtnl_hstat_group *const *grp;
+
+		for (grp = cmd.grp->children; *grp; grp++) {
+			err = hstat_dumper_push_grp_load(dumper, *grp);
+			if (err)
+				return err;
+		}
+	}
 
 	return 0;
 }
