@@ -942,6 +942,7 @@ struct dev_ifalias {
 };
 
 struct devlink;
+struct rtnl_hstat_req;
 
 /*
  * This structure defines the management hooks for network devices.
@@ -1255,6 +1256,11 @@ struct devlink;
  *	Get devlink instance associated with a given netdev.
  *	Called with a reference on the netdevice and devlink locks only,
  *	rtnl_lock is not held.
+ * int (*ndo_hstat_get_groups)(const struct net_device *dev,
+ *			       struct rtnl_hstat_req *req);
+ *	This function is used to retrieve driver's groups of hierarchical stats.
+ *	Driver should use rtnl_hstat_add_grp() to report its groups.
+ *	See Documentation/networking/hstats.rst for details.
  */
 struct net_device_ops {
 	int			(*ndo_init)(struct net_device *dev);
@@ -1454,6 +1460,8 @@ struct net_device_ops {
 	int			(*ndo_xsk_async_xmit)(struct net_device *dev,
 						      u32 queue_id);
 	struct devlink *	(*ndo_get_devlink)(struct net_device *dev);
+	int			(*ndo_hstat_get_groups)(const struct net_device *dev,
+							struct rtnl_hstat_req *req);
 };
 
 /**

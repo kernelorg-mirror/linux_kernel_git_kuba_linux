@@ -49,6 +49,7 @@
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <net/arp.h>
+#include <net/hstats.h>
 #include <net/route.h>
 #include <net/udp.h>
 #include <net/tcp.h>
@@ -4865,6 +4866,23 @@ static int rtnl_fill_statsinfo(struct sk_buff *skb, struct net_device *dev,
 		*idxattr = 0;
 	}
 
+	if (stats_attr_valid(filter_mask, IFLA_STATS_LINK_HSTATS, *idxattr)) {
+		*idxattr = IFLA_STATS_LINK_HSTATS;
+		attr = nla_nest_start(skb, IFLA_STATS_LINK_HSTATS);
+		if (!attr)
+			goto nla_put_failure;
+
+		err = rtnl_get_link_hstats(skb, dev, prividx);
+		if (err == -ENODATA)
+			nla_nest_cancel(skb, attr);
+		else
+			nla_nest_end(skb, attr);
+
+		if (err && err != -ENODATA)
+			goto nla_put_failure;
+		*idxattr = 0;
+	}
+
 	nlmsg_end(skb, nlh);
 
 	return 0;
@@ -4939,6 +4957,9 @@ static size_t if_nlmsg_stats_size(const struct net_device *dev,
 		}
 		rcu_read_unlock();
 	}
+
+	if (stats_attr_valid(filter_mask, IFLA_STATS_LINK_HSTATS, 0))
+		size += rtnl_get_link_hstats_size(dev);
 
 	return size;
 }
