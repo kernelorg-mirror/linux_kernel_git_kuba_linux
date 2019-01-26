@@ -447,11 +447,6 @@ static inline bool nfp_net_fw_ver_eq(struct nfp_net_fw_version *fw_ver,
 	       fw_ver->minor == minor;
 }
 
-struct nfp_stat_pair {
-	u64 pkts;
-	u64 bytes;
-};
-
 /**
  * struct nfp_net_dp - NFP network device datapath data structure
  * @dev:		Backpointer to struct device
