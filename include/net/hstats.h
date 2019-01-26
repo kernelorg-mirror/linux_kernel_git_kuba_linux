@@ -69,6 +69,12 @@ void rtnl_hstat_add_grp(struct rtnl_hstat_req *req,
 bool rtnl_hstat_qual_is_set(struct rtnl_hstat_req *req, int qual);
 int rtnl_hstat_qual_get(struct rtnl_hstat_req *req, int qual);
 
+static inline bool rtnl_hstat_is_rx(struct rtnl_hstat_req *req)
+{
+	return rtnl_hstat_qual_get(req, RTNL_HSTATS_QUAL_DIRECTION) ==
+		IFLA_HSTATS_QUAL_DIR_RX;
+}
+
 static inline void
 rtnl_hstat_dump(struct rtnl_hstat_req *req, const int id, const u64 val)
 {
@@ -105,5 +111,14 @@ enum {
 	},								\
 	[RTNL_HSTATS_QUAL_DIRECTION] = {				\
 		.constant	= IFLA_HSTATS_QUAL_DIR_ ##dir,		\
+	}
+
+#define RTNL_HSTATS_QUALS_BASIC_BIDIR(type)				\
+	[RTNL_HSTATS_QUAL_TYPE] = {					\
+		.constant	= IFLA_HSTATS_QUAL_TYPE_ ##type,	\
+	},								\
+	[RTNL_HSTATS_QUAL_DIRECTION] = {				\
+		.min		= IFLA_HSTATS_QUAL_DIR_RX,		\
+		.max		= IFLA_HSTATS_QUAL_DIR_TX + 1,		\
 	}
 #endif
