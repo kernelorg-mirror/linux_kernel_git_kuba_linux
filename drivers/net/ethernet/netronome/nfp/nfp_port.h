@@ -105,7 +105,7 @@ static inline bool nfp_port_is_vnic(const struct nfp_port *port)
 int
 nfp_port_set_features(struct net_device *netdev, netdev_features_t features);
 
-struct nfp_port *nfp_port_from_netdev(struct net_device *netdev);
+struct nfp_port *nfp_port_from_netdev(const struct net_device *netdev);
 int nfp_port_get_port_parent_id(struct net_device *netdev,
 				struct netdev_phys_item_id *ppid);
 struct nfp_port *

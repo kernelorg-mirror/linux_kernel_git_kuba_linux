@@ -75,7 +75,7 @@ enum nfp_repr_type {
 
 extern const struct net_device_ops nfp_repr_netdev_ops;
 
-static inline bool nfp_netdev_is_nfp_repr(struct net_device *netdev)
+static inline bool nfp_netdev_is_nfp_repr(const struct net_device *netdev)
 {
 	return netdev->netdev_ops == &nfp_repr_netdev_ops;
 }

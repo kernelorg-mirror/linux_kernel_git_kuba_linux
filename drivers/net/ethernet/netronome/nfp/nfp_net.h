@@ -839,7 +839,7 @@ extern const char nfp_driver_version[];
 
 extern const struct net_device_ops nfp_net_netdev_ops;
 
-static inline bool nfp_netdev_is_nfp_net(struct net_device *netdev)
+static inline bool nfp_netdev_is_nfp_net(const struct net_device *netdev)
 {
 	return netdev->netdev_ops == &nfp_net_netdev_ops;
 }

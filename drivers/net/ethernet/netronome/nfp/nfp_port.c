@@ -11,7 +11,7 @@
 #include "nfp_net.h"
 #include "nfp_port.h"
 
-struct nfp_port *nfp_port_from_netdev(struct net_device *netdev)
+struct nfp_port *nfp_port_from_netdev(const struct net_device *netdev)
 {
 	if (nfp_netdev_is_nfp_net(netdev)) {
 		struct nfp_net *nn = netdev_priv(netdev);
