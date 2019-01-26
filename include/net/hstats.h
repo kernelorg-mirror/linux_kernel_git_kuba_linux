@@ -45,6 +45,7 @@ struct rtnl_hstat_qualifier {
  * struct rtnl_hstat_group - node in the hstat hierarchy
  * @qualifiers:	attributes describing this group
  * @has_children: @children array is present and NULL-terminated
+ * @partial_flags: partial flags
  * @stats_cnt:	number of stats in the bitmask
  * @stats:	bitmask of stats present
  * @get_stats:	driver callback for dumping the stats
@@ -54,6 +55,7 @@ struct rtnl_hstat_qualifier {
 struct rtnl_hstat_group {
 	/* Note: this is *not* indexed with IFLA_* attributes! */
 	struct rtnl_hstat_qualifier qualifiers[RTNL_HSTATS_QUAL_CNT];
+	u8 partial_flags;
 	bool has_children;
 	/* Can't use bitmaps - words are variable length */
 	unsigned int stats_cnt;

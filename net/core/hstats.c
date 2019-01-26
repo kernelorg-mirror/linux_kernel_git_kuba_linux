@@ -358,6 +358,17 @@ hstat_dumper_put_qual(struct hstat_dumper *dumper, int i, u32 val)
 	return nla_put_u32(dumper->skb, rtnl_qual2ifla[i], val);
 }
 
+static int
+hstat_dumper_put_partials(struct hstat_dumper *dumper, u32 val)
+{
+	if (dumper->sizing) {
+		dumper->size += nla_total_size(sizeof(u32));
+		return 0;
+	}
+
+	return nla_put_u32(dumper->skb, IFLA_HSTATS_PARTIAL, val);
+}
+
 /* Dumper handlers */
 static int hstat_dumper_grp_load(struct hstat_dumper *dumper)
 {
@@ -377,6 +388,12 @@ static int hstat_dumper_grp_load(struct hstat_dumper *dumper)
 	err = hstat_dumper_open_grp(dumper);
 	if (err)
 		return err;
+
+	if (cmd.grp->partial_flags) {
+		err = hstat_dumper_put_partials(dumper, cmd.grp->partial_flags);
+		if (err)
+			return err;
+	}
 
 	for (i = 0; i < RTNL_HSTATS_QUAL_CNT; i++) {
 		const struct rtnl_hstat_qualifier *q;
