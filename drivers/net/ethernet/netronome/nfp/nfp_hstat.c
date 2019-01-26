@@ -216,6 +216,49 @@ static const struct rtnl_hstat_group nfp_hstat_tm = {
 	.stats_cnt = 1,
 };
 
+static int
+nfp_hstat_mac_pp_pause(struct net_device *netdev, struct rtnl_hstat_req *req,
+		       const struct rtnl_hstat_group *grp)
+{
+	static const u32 remap_rx[] = {
+		0xe0, 0xe8, 0xb0, 0xb8, 0xf0, 0xf7, 0x100, 0x108
+	};
+	static const u32 remap_tx[] = {
+		0x1c0, 0x1c8, 0x1e0, 0x1e8, 0x1d0, 0x1d8, 0x1f0, 0x1f8
+	};
+	struct nfp_port *port;
+	const u32 *remap;
+	u8 dir, prio;
+
+	port = nfp_port_from_netdev(netdev);
+	if (!__nfp_port_get_eth_port(port) || !port->eth_stats)
+		return -EINVAL;
+
+	prio = rtnl_hstat_qual_get(req, RTNL_HSTATS_QUAL_PRIORITY);
+	dir = rtnl_hstat_qual_get(req, RTNL_HSTATS_QUAL_DIRECTION);
+	remap = dir == IFLA_HSTATS_QUAL_DIR_RX ? remap_rx : remap_tx;
+
+	rtnl_hstat_dump(req, IFLA_HSTATS_STAT_IEEE8023_PAUSEMACCtrlFrames,
+			readq(port->eth_stats + remap[prio]));
+	return 0;
+}
+
+static const struct rtnl_hstat_group nfp_hstat_pp_pause = {
+	.qualifiers = {
+		RTNL_HSTATS_QUALS_BASIC_BIDIR(DEV),
+		[RTNL_HSTATS_QUAL_PRIORITY] = {
+			.max	= 8,
+		},
+	},
+	.partial_flags = IFLA_HSTATS_PARTIAL_CLASSIFIER,
+
+	.get_stats = nfp_hstat_mac_pp_pause,
+	.stats	= {
+		[1] =	RTNL_HSTATS_STAT_IEEE8023_PAUSEMACCtrlFrames_BIT,
+	},
+	.stats_cnt = 1,
+};
+
 /* NFD per-vNIC stats */
 static int
 nfp_hstat_vnic_nfd_basic_get(struct net_device *netdev,
@@ -402,6 +445,7 @@ int nfp_net_hstat_get_groups(const struct net_device *netdev,
 	port = nfp_port_from_netdev(netdev);
 	if (__nfp_port_get_eth_port(port) && port->eth_stats) {
 		rtnl_hstat_add_grp(req, &nfp_hstat_tm);
+		rtnl_hstat_add_grp(req, &nfp_hstat_pp_pause);
 		rtnl_hstat_add_grp(req, &nfp_hstat_mac);
 	}
 
