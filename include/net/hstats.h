@@ -17,6 +17,9 @@ struct sk_buff;
 enum {
 	RTNL_HSTATS_QUAL_TYPE,
 	RTNL_HSTATS_QUAL_DIRECTION,
+	RTNL_HSTATS_QUAL_QUEUE,
+	RTNL_HSTATS_QUAL_PRIORITY,
+	RTNL_HSTATS_QUAL_TC,
 
 	RTNL_HSTATS_QUAL_CNT
 };
@@ -32,6 +35,10 @@ struct rtnl_hstat_req {
 
 struct rtnl_hstat_qualifier {
 	unsigned int constant;
+	unsigned int min;
+	unsigned int max;
+	int (*get_max)(const struct net_device *dev,
+		       const struct rtnl_hstat_group *grp);
 };
 
 /**
@@ -59,6 +66,8 @@ struct rtnl_hstat_group {
 
 void rtnl_hstat_add_grp(struct rtnl_hstat_req *req,
 			const struct rtnl_hstat_group *grp);
+bool rtnl_hstat_qual_is_set(struct rtnl_hstat_req *req, int qual);
+int rtnl_hstat_qual_get(struct rtnl_hstat_req *req, int qual);
 
 static inline void
 rtnl_hstat_dump(struct rtnl_hstat_req *req, const int id, const u64 val)

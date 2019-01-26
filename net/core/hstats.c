@@ -22,14 +22,28 @@
  *      ============== <---- top of the stack before current handler
  */
 enum hstat_dumper_cmd {
-	/*      open grp
-	 *   put const quals
-	 *   ---------------
-	 *  |   DUMP STATS  |
-	 *  |    CLOSE grp  |
-	 *   ===============
+	/* Non-iterative group:		Iterative group:
+	 *
+	 *      open grp		     open grp
+	 *   put const quals		 put const quals
+	 *   ---------------		 ---------------
+	 *  |   DUMP STATS  |		|      ITER     |
+	 *  |    CLOSE grp  |		|    CLOSE grp  |
+	 *   ===============		 ===============
 	 */
 	HSTAT_DCMD_GRP_LOAD,
+	/* Non-last iteration:		Last iteration:
+	 *
+	 *      open grp		     open grp
+	 *  put current quals		put current quals
+	 *   increment quals		 ---------------
+	 *   ---------------		|   DUMP STATS  |
+	 *  |   DUMP STATS  |		|    CLOSE grp  |
+	 *  |    CLOSE grp  |		 ===============
+	 *  |      ITER     |
+	 *   ===============
+	 */
+	HSTAT_DCMD_GRP_ITER,
 	/* dump all statitics
 	 *   ---------------
 	 *  |  LOAD child0  |
@@ -48,6 +62,8 @@ struct hstat_dumper {
 	struct net_device *dev;
 	/* For sizing we only have a const pointer to dev */
 	const struct net_device *const_dev;
+	u32 quals[RTNL_HSTATS_QUAL_CNT];
+	unsigned long quals_set;
 	int err;
 
 	/* For calculating skb size */
@@ -62,11 +78,23 @@ struct hstat_dumper {
 	size_t cmd_stack_len;
 };
 
+struct hstat_qualifier_state {
+	u32 cur;
+	u32 min;
+	u32 max;
+};
+
 struct hstat_dumper_cmd_simple {
 	u64 cmd;
 };
 
 struct hstat_dumper_cmd_grp_load {
+	const struct rtnl_hstat_group *grp;
+	u64 cmd;
+};
+
+struct hstat_dumper_cmd_grp_iter {
+	struct hstat_qualifier_state *quals;
 	const struct rtnl_hstat_group *grp;
 	u64 cmd;
 };
@@ -77,6 +105,7 @@ struct hstat_dumper_cmd_grp_dump {
 };
 
 struct hstat_dumper_cmd_grp_close {
+	unsigned long quals_set;
 	struct nlattr *nl_attr;
 	u64 cmd;
 };
@@ -85,11 +114,14 @@ struct hstat_dumper_cmd_grp_close {
 static const int rtnl_qual2ifla[RTNL_HSTATS_QUAL_CNT] = {
 	[RTNL_HSTATS_QUAL_TYPE]		= IFLA_HSTATS_QUAL_TYPE,
 	[RTNL_HSTATS_QUAL_DIRECTION]	= IFLA_HSTATS_QUAL_DIRECTION,
+	[RTNL_HSTATS_QUAL_QUEUE]	= IFLA_HSTATS_QUAL_QUEUE,
+	[RTNL_HSTATS_QUAL_PRIORITY]	= IFLA_HSTATS_QUAL_PRIORITY,
+	[RTNL_HSTATS_QUAL_TC]		= IFLA_HSTATS_QUAL_TC,
 };
 
 static bool rtnl_hstat_qualifier_present(const struct rtnl_hstat_qualifier *q)
 {
-	return q->constant;
+	return q->constant || q->max || q->get_max;
 }
 
 /* Dumper basics */
@@ -198,6 +230,20 @@ hstat_dumper_push_grp_load(struct hstat_dumper *dumper,
 }
 
 static int
+hstat_dumper_push_grp_iter(struct hstat_dumper *dumper,
+			   const struct rtnl_hstat_group *grp,
+			   struct hstat_qualifier_state *quals)
+{
+	struct hstat_dumper_cmd_grp_iter cmd = {
+		.cmd =		HSTAT_DCMD_GRP_ITER,
+		.grp =		grp,
+		.quals =	quals,
+	};
+
+	return __hstat_dumper_push_cmd(dumper, &cmd, sizeof(cmd));
+}
+
+static int
 hstat_dumper_push_dump(struct hstat_dumper *dumper,
 		       const struct rtnl_hstat_group *grp)
 {
@@ -215,6 +261,7 @@ hstat_dumper_push_grp_close(struct hstat_dumper *dumper, struct nlattr *nl_grp)
 	struct hstat_dumper_cmd_grp_close cmd = {
 		.cmd =		HSTAT_DCMD_GRP_CLOSE,
 		.nl_attr =	nl_grp,
+		.quals_set =	dumper->quals_set,
 	};
 
 	return __hstat_dumper_push_cmd(dumper, &cmd, sizeof(cmd));
@@ -303,12 +350,18 @@ hstat_dumper_put_qual(struct hstat_dumper *dumper, int i, u32 val)
 		return 0;
 	}
 
+	/* Qualifiers cannot be overwritten once set */
+	if (WARN_ON_ONCE(__test_and_set_bit(i, &dumper->quals_set)))
+		return -EINVAL;
+	dumper->quals[i] = val;
+
 	return nla_put_u32(dumper->skb, rtnl_qual2ifla[i], val);
 }
 
 /* Dumper handlers */
 static int hstat_dumper_grp_load(struct hstat_dumper *dumper)
 {
+	struct hstat_qualifier_state *quals = NULL;
 	struct hstat_dumper_cmd_grp_load cmd;
 	int i, err;
 
@@ -336,7 +389,89 @@ static int hstat_dumper_grp_load(struct hstat_dumper *dumper)
 			err = hstat_dumper_put_qual(dumper, i, q->constant);
 			if (err)
 				return err;
+		} else {
+			int max;
+
+			/* Each iteration point has its own set of iterators,
+			 * this allows iterating different group over different
+			 * sets of qualifiers.
+			 */
+			if (!quals) {
+				quals = kcalloc(RTNL_HSTATS_QUAL_CNT,
+						sizeof(*quals), GFP_KERNEL);
+				if (!quals)
+					return -ENOMEM;
+			}
+
+			max = q->max ?: q->get_max(dumper->const_dev, cmd.grp);
+			if (max < 0)
+				return max;
+
+			if (WARN_ON_ONCE(q->min > max))
+				return -EINVAL;
+			quals[i].min = q->min;
+			quals[i].cur = q->min;
+			quals[i].max = max;
 		}
+	}
+
+	if (quals)
+		return hstat_dumper_push_grp_iter(dumper, cmd.grp, quals);
+	else
+		return hstat_dumper_push_dump(dumper, cmd.grp);
+}
+
+static int hstat_dumper_grp_iter(struct hstat_dumper *dumper)
+{
+	struct hstat_dumper_cmd_grp_iter cmd;
+	int i, err;
+	bool done;
+
+	err = hstat_dumper_pop(dumper, &cmd, sizeof(cmd));
+	if (err)
+		return err;
+	if (dumper->err) {
+		kfree(cmd.quals);
+		return 0;
+	}
+
+	/* Find out if iteration is done */
+	for (i = 0; i < RTNL_HSTATS_QUAL_CNT; i++)
+		if (cmd.quals[i].cur + 1 < cmd.quals[i].max)
+			break;
+	done = i == RTNL_HSTATS_QUAL_CNT;
+	if (!done) {
+		err = hstat_dumper_push_grp_iter(dumper, cmd.grp, cmd.quals);
+		if (err)
+			return err;
+	}
+
+	err = hstat_dumper_open_grp(dumper);
+	if (err)
+		return err;
+
+	for (i = 0; i < RTNL_HSTATS_QUAL_CNT; i++) {
+		if (!cmd.quals[i].max)
+			continue;
+
+		err = hstat_dumper_put_qual(dumper, i, cmd.quals[i].cur);
+		if (err)
+			return err;
+	}
+
+	if (!done) {
+		for (i = 0; i < RTNL_HSTATS_QUAL_CNT; i++) {
+			if (cmd.quals[i].cur >= cmd.quals[i].max)
+				continue;
+
+			cmd.quals[i].cur++;
+			if (cmd.quals[i].cur == cmd.quals[i].max)
+				cmd.quals[i].cur = cmd.quals[i].min;
+			else
+				break;
+		}
+	} else {
+		kfree(cmd.quals);
 	}
 
 	return hstat_dumper_push_dump(dumper, cmd.grp);
@@ -379,6 +514,7 @@ static int hstat_dumper_grp_close(struct hstat_dumper *dumper)
 	if (err)
 		return err;
 
+	dumper->quals_set = cmd.quals_set;
 	if (!dumper->err)
 		nla_nest_end(dumper->skb, cmd.nl_attr);
 	else
@@ -417,6 +553,9 @@ static int hstat_dumper_run(struct hstat_dumper *dumper)
 		case HSTAT_DCMD_ROOT_GRP_DONE:
 			err = hstat_dumper_root_grp_done(dumper);
 			break;
+		case HSTAT_DCMD_GRP_ITER:
+			err = hstat_dumper_grp_iter(dumper);
+			break;
 		case HSTAT_DCMD_GRP_LOAD:
 			err = hstat_dumper_grp_load(dumper);
 			break;
@@ -448,6 +587,21 @@ rtnl_hstat_add_grp(struct rtnl_hstat_req *req,
 		req->err = hstat_dumper_push_grp_load(req->dumper, grp);
 }
 EXPORT_SYMBOL(rtnl_hstat_add_grp);
+
+bool rtnl_hstat_qual_is_set(struct rtnl_hstat_req *req, int qual)
+{
+	return test_bit(qual, &req->dumper->quals_set);
+}
+EXPORT_SYMBOL(rtnl_hstat_qual_is_set);
+
+int rtnl_hstat_qual_get(struct rtnl_hstat_req *req, int qual)
+{
+	if (!test_bit(qual, &req->dumper->quals_set))
+		return U32_MAX;
+
+	return req->dumper->quals[qual];
+}
+EXPORT_SYMBOL(rtnl_hstat_qual_get);
 
 /* Stack call points */
 static size_t
