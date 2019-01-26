@@ -101,6 +101,56 @@ enum {
 	RTNL_HSTAT_BIT(LINUX_CSUM_COMPLETE, 0),
 	RTNL_HSTAT_BIT(LINUX_CSUM_UNNECESSARY, 0),
 	RTNL_HSTAT_BIT(LINUX_SEGMENTATION_OFFLOAD_PKTS, 0),
+
+	/* IETF RFC2819 ("Remote Network Monitoring MIB") */
+	RTNL_HSTAT_BIT(RFC2819_etherStatsDropEvents, 1),
+	RTNL_HSTAT_BIT(RFC2819_etherStatsOctets, 1),
+	RTNL_HSTAT_BIT(RFC2819_etherStatsPkts, 1),
+	RTNL_HSTAT_BIT(RFC2819_etherStatsBroadcastPkts, 1),
+	RTNL_HSTAT_BIT(RFC2819_etherStatsMulticastPkts, 1),
+	RTNL_HSTAT_BIT(RFC2819_etherStatsCRCAlignErrors, 1),
+	RTNL_HSTAT_BIT(RFC2819_etherStatsUndersizePkts, 1),
+	RTNL_HSTAT_BIT(RFC2819_etherStatsOversizePkts, 1),
+	RTNL_HSTAT_BIT(RFC2819_etherStatsFragments, 1),
+	RTNL_HSTAT_BIT(RFC2819_etherStatsJabbers, 1),
+	RTNL_HSTAT_BIT(RFC2819_etherStatsCollisions, 1),
+	RTNL_HSTAT_BIT(RFC2819_etherStatsPkts64Octets, 1),
+	RTNL_HSTAT_BIT(RFC2819_etherStatsPkts65to127Octets, 1),
+	RTNL_HSTAT_BIT(RFC2819_etherStatsPkts128to255Octets, 1),
+	RTNL_HSTAT_BIT(RFC2819_etherStatsPkts256to511Octets, 1),
+	RTNL_HSTAT_BIT(RFC2819_etherStatsPkts512to1023Octets, 1),
+	RTNL_HSTAT_BIT(RFC2819_etherStatsPkts1024to1518Octets, 1),
+	/* Extensions to IETF RFC2819 */
+	RTNL_HSTAT_BIT(RFC2819EXT_etherStatsPkts1024toMaxOctets, 1),
+	RTNL_HSTAT_BIT(RFC2819EXT_etherStatsPkts1519toMaxOctets, 1),
+	RTNL_HSTAT_BIT(RFC2819EXT_etherStatsPkts1024to2047Octets, 1),
+	RTNL_HSTAT_BIT(RFC2819EXT_etherStatsPkts2048to4095Octets, 1),
+	RTNL_HSTAT_BIT(RFC2819EXT_etherStatsPkts4096to8191Octets, 1),
+	RTNL_HSTAT_BIT(RFC2819EXT_etherStatsPkts8192toMaxOctets, 1),
+
+	/* IETF RFC2863 ("The Interfaces Group MIB") */
+	RTNL_HSTAT_BIT(RFC2863_UcastPkts, 1),
+	RTNL_HSTAT_BIT(RFC2863_Errors, 1),
+	RTNL_HSTAT_BIT(RFC2863_Discards, 1),
+
+	/* IEEE 802.3 */
+	RTNL_HSTAT_BIT(IEEE8023_FramesOK, 2),
+	RTNL_HSTAT_BIT(IEEE8023_OctetsOK, 2),
+	RTNL_HSTAT_BIT(IEEE8023_MulticastFramesOK, 2),
+	RTNL_HSTAT_BIT(IEEE8023_BroadcastFramesOK, 2),
+	RTNL_HSTAT_BIT(IEEE8023_FrameCheckSequenceErrors, 2),
+	RTNL_HSTAT_BIT(IEEE8023_AlignmentErrors, 2),
+	RTNL_HSTAT_BIT(IEEE8023_InRangeLengthErrors, 2),
+	RTNL_HSTAT_BIT(IEEE8023_OutOfRangeLengthField, 2),
+	RTNL_HSTAT_BIT(IEEE8023_FrameTooLongErrors, 2),
+	RTNL_HSTAT_BIT(IEEE8023_CollisionFrames, 2),
+	RTNL_HSTAT_BIT(IEEE8023_SQETestErrors, 2),
+	RTNL_HSTAT_BIT(IEEE8023_SymbolErrorDuringCarrier, 2),
+	RTNL_HSTAT_BIT(IEEE8023_MACControlFrames, 2),
+	RTNL_HSTAT_BIT(IEEE8023_UnsupportedOpcodes, 2),
+	RTNL_HSTAT_BIT(IEEE8023_PAUSEMACCtrlFrames, 2),
+	RTNL_HSTAT_BIT(IEEE8023_FECCorrectedBlocks, 2),
+	RTNL_HSTAT_BIT(IEEE8023_FECUncorrectableBlocks, 2),
 #undef RTNL_HSTAT_BIT
 };
 
