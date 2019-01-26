@@ -145,6 +145,8 @@ extern struct pci_driver nfp_netvf_pci_driver;
 
 extern const struct devlink_ops nfp_devlink_ops;
 
+void nfp_net_hstat_init(void);
+
 int nfp_net_pci_probe(struct nfp_pf *pf);
 void nfp_net_pci_remove(struct nfp_pf *pf);
 

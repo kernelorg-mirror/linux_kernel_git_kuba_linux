@@ -765,6 +765,7 @@ static int __init nfp_main_init(void)
 		nfp_driver_name);
 
 	nfp_net_debugfs_create();
+	nfp_net_hstat_init();
 
 	err = pci_register_driver(&nfp_pci_driver);
 	if (err < 0)
