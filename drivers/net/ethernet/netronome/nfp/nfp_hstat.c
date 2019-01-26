@@ -7,52 +7,29 @@
 
 /* NFD per-vNIC stats */
 static int
-nfp_hstat_vnic_nfd_basic_get_rx(struct net_device *netdev,
-				struct rtnl_hstat_req *req,
-				const struct rtnl_hstat_group *grp)
+nfp_hstat_vnic_nfd_basic_get(struct net_device *netdev,
+			     struct rtnl_hstat_req *req,
+			     const struct rtnl_hstat_group *grp)
 {
 	struct nfp_net *nn = netdev_priv(netdev);
+	u32 off;
+
+	off = rtnl_hstat_is_rx(req) ?
+		0 : NFP_NET_CFG_STATS_TX_OCTETS - NFP_NET_CFG_STATS_RX_OCTETS;
 
 	rtnl_hstat_dump(req, IFLA_HSTATS_STAT_LINUX_PKTS,
-			nn_readq(nn, NFP_NET_CFG_STATS_RX_FRAMES));
+			nn_readq(nn, NFP_NET_CFG_STATS_RX_FRAMES + off));
 	rtnl_hstat_dump(req, IFLA_HSTATS_STAT_LINUX_BYTES,
-			nn_readq(nn, NFP_NET_CFG_STATS_RX_OCTETS));
+			nn_readq(nn, NFP_NET_CFG_STATS_RX_OCTETS + off));
 	return 0;
 }
 
-static const struct rtnl_hstat_group nfp_hstat_vnic_nfd_rx = {
+static const struct rtnl_hstat_group nfp_hstat_vnic_nfd = {
 	.qualifiers = {
-		RTNL_HSTATS_QUALS_BASIC(DEV, RX),
+		RTNL_HSTATS_QUALS_BASIC_BIDIR(DEV),
 	},
 
-	.get_stats = nfp_hstat_vnic_nfd_basic_get_rx,
-	.stats	= {
-		[0] =	RTNL_HSTATS_STAT_LINUX_PKTS_BIT |
-			RTNL_HSTATS_STAT_LINUX_BYTES_BIT,
-	},
-	.stats_cnt = 2,
-};
-
-static int
-nfp_hstat_vnic_nfd_basic_get_tx(struct net_device *netdev,
-				struct rtnl_hstat_req *req,
-				const struct rtnl_hstat_group *grp)
-{
-	struct nfp_net *nn = netdev_priv(netdev);
-
-	rtnl_hstat_dump(req, IFLA_HSTATS_STAT_LINUX_PKTS,
-			nn_readq(nn, NFP_NET_CFG_STATS_TX_FRAMES));
-	rtnl_hstat_dump(req, IFLA_HSTATS_STAT_LINUX_BYTES,
-			nn_readq(nn, NFP_NET_CFG_STATS_TX_OCTETS));
-	return 0;
-}
-
-static const struct rtnl_hstat_group nfp_hstat_vnic_nfd_tx = {
-	.qualifiers = {
-		RTNL_HSTATS_QUALS_BASIC(DEV, TX),
-	},
-
-	.get_stats = nfp_hstat_vnic_nfd_basic_get_tx,
+	.get_stats = nfp_hstat_vnic_nfd_basic_get,
 	.stats	= {
 		[0] =	RTNL_HSTATS_STAT_LINUX_PKTS_BIT |
 			RTNL_HSTATS_STAT_LINUX_BYTES_BIT,
@@ -63,8 +40,7 @@ static const struct rtnl_hstat_group nfp_hstat_vnic_nfd_tx = {
 int nfp_net_hstat_get_groups(const struct net_device *netdev,
 			     struct rtnl_hstat_req *req)
 {
-	rtnl_hstat_add_grp(req, &nfp_hstat_vnic_nfd_rx);
-	rtnl_hstat_add_grp(req, &nfp_hstat_vnic_nfd_tx);
+	rtnl_hstat_add_grp(req, &nfp_hstat_vnic_nfd);
 
 	return 0;
 }
