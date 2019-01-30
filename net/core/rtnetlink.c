@@ -4897,8 +4897,8 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
-static size_t if_nlmsg_stats_size(const struct net_device *dev,
-				  u32 filter_mask)
+static ssize_t if_nlmsg_stats_size(const struct net_device *dev,
+				   u32 filter_mask)
 {
 	size_t size = 0;
 
@@ -4958,8 +4958,14 @@ static size_t if_nlmsg_stats_size(const struct net_device *dev,
 		rcu_read_unlock();
 	}
 
-	if (stats_attr_valid(filter_mask, IFLA_STATS_LINK_HSTATS, 0))
-		size += rtnl_get_link_hstats_size(dev);
+	if (stats_attr_valid(filter_mask, IFLA_STATS_LINK_HSTATS, 0)) {
+		ssize_t ret;
+
+		ret = rtnl_get_link_hstats_size(dev);
+		if (ret < 0)
+			return ret;
+		size += ret;
+	}
 
 	return size;
 }
@@ -5007,6 +5013,7 @@ static int rtnl_stats_get(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct if_stats_msg *ifsm;
 	struct sk_buff *nskb;
 	u32 filter_mask;
+	ssize_t size;
 	int err;
 
 	err = rtnl_valid_stats_req(nlh, netlink_strict_get_check(skb),
@@ -5027,7 +5034,11 @@ static int rtnl_stats_get(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (!filter_mask)
 		return -EINVAL;
 
-	nskb = nlmsg_new(if_nlmsg_stats_size(dev, filter_mask), GFP_KERNEL);
+	size = if_nlmsg_stats_size(dev, filter_mask);
+	if (size < 0)
+		return size;
+
+	nskb = nlmsg_new(size, GFP_KERNEL);
 	if (!nskb)
 		return -ENOBUFS;
 

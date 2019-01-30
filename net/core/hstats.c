@@ -621,7 +621,7 @@ int rtnl_hstat_qual_get(struct rtnl_hstat_req *req, int qual)
 EXPORT_SYMBOL(rtnl_hstat_qual_get);
 
 /* Stack call points */
-static size_t
+static ssize_t
 __rtnl_get_link_hstats(struct sk_buff *skb, const struct net_device *const_dev,
 		       struct net_device *dev, int *prividx)
 {
@@ -664,7 +664,7 @@ exit_dumper_destroy:
 	return ret;
 }
 
-size_t rtnl_get_link_hstats_size(const struct net_device *dev)
+ssize_t rtnl_get_link_hstats_size(const struct net_device *dev)
 {
 	ssize_t ret;
 
@@ -672,7 +672,7 @@ size_t rtnl_get_link_hstats_size(const struct net_device *dev)
 	return ret;
 }
 
-size_t
+ssize_t
 rtnl_get_link_hstats(struct sk_buff *skb, struct net_device *dev, int *prividx)
 {
 	ssize_t ret;

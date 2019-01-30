@@ -86,9 +86,9 @@ rtnl_hstat_dump(struct rtnl_hstat_req *req, const int id, const u64 val)
 		req->err = -EMSGSIZE;
 }
 
-size_t rtnl_get_link_hstats_size(const struct net_device *dev);
-size_t rtnl_get_link_hstats(struct sk_buff *skb, struct net_device *dev,
-			    int *prividx);
+ssize_t rtnl_get_link_hstats_size(const struct net_device *dev);
+ssize_t rtnl_get_link_hstats(struct sk_buff *skb, struct net_device *dev,
+			     int *prividx);
 
 enum {
 #define RTNL_HSTAT_BIT(_name, _word) \
