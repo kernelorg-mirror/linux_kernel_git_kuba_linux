@@ -350,10 +350,10 @@ const struct devlink_ops nfp_devlink_ops = {
 	.flash_update		= nfp_devlink_flash_update,
 };
 
-int nfp_devlink_port_register(struct nfp_app *app, struct nfp_port *port)
+static int
+nfp_devlink_port_register_phys(struct devlink *devlink, struct nfp_port *port)
 {
 	struct nfp_eth_table_port eth_port;
-	struct devlink *devlink;
 	int ret;
 
 	rtnl_lock();
@@ -366,9 +366,43 @@ int nfp_devlink_port_register(struct nfp_app *app, struct nfp_port *port)
 			       eth_port.label_port, eth_port.is_split,
 			       eth_port.label_subport);
 
-	devlink = priv_to_devlink(app->pf);
-
 	return devlink_port_register(devlink, &port->dl_port, port->eth_id);
+}
+
+/* Devlink port IDs need to be unique, our chip doesn't really have
+ * a good identifier to use here, so we use arbitrary constants.
+ */
+#define NFP_DEVLINK_PORT_PCI_PORT_ID_PF_OFF	1000000
+#define NFP_DEVLINK_PORT_PCI_PORT_ID_VF_OFF	1000
+#define NFP_DEVLINK_PORT_PCI_PORT_ID_SUB_OFF	1
+
+static u32 nfp_devlink_port_gen_pci_port_id(struct nfp_port *port)
+{
+	return (port->pf_id + 1) * NFP_DEVLINK_PORT_PCI_PORT_ID_PF_OFF +
+	       (port->vf_id + 1) * NFP_DEVLINK_PORT_PCI_PORT_ID_VF_OFF +
+		port->pf_split_id * NFP_DEVLINK_PORT_PCI_PORT_ID_SUB_OFF;
+}
+
+int nfp_devlink_port_register(struct nfp_app *app, struct nfp_port *port)
+{
+	struct devlink *devlink = priv_to_devlink(app->pf);
+	u32 id;
+
+	switch (port->type) {
+	case NFP_PORT_PHYS_PORT:
+		return nfp_devlink_port_register_phys(devlink, port);
+	case NFP_PORT_PF_PORT:
+		devlink_port_attrs_pci_pf_set(&port->dl_port, port->pf_id);
+		id = nfp_devlink_port_gen_pci_port_id(port);
+		return devlink_port_register(devlink, &port->dl_port, id);
+	case NFP_PORT_VF_PORT:
+		devlink_port_attrs_pci_vf_set(&port->dl_port, port->pf_id,
+					      port->vf_id);
+		id = nfp_devlink_port_gen_pci_port_id(port);
+		return devlink_port_register(devlink, &port->dl_port, id);
+	default:
+		return -EINVAL;
+	}
 }
 
 void nfp_devlink_port_unregister(struct nfp_port *port)
