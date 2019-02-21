@@ -167,6 +167,8 @@ enum devlink_port_flavour {
 	DEVLINK_PORT_FLAVOUR_DSA, /* Distributed switch architecture
 				   * interconnect port.
 				   */
+	DEVLINK_PORT_FLAVOUR_PCI_PF, /* PCI Physical function port */
+	DEVLINK_PORT_FLAVOUR_PCI_VF, /* PCI Physical function port */
 };
 
 enum devlink_param_cmode {
@@ -331,6 +333,9 @@ enum devlink_attr {
 
 	DEVLINK_ATTR_FLASH_UPDATE_FILE_NAME,	/* string */
 	DEVLINK_ATTR_FLASH_UPDATE_COMPONENT,	/* string */
+
+	DEVLINK_ATTR_PORT_PCI_PF_NUMBER,	/* u32 */
+	DEVLINK_ATTR_PORT_PCI_VF_NUMBER,	/* u32 */
 
 	/* add new attributes above here, update the policy in devlink.c */
 

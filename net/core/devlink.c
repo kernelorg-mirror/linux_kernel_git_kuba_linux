@@ -516,16 +516,35 @@ static int devlink_nl_port_attrs_put(struct sk_buff *msg,
 		return 0;
 	if (nla_put_u16(msg, DEVLINK_ATTR_PORT_FLAVOUR, attrs->flavour))
 		return -EMSGSIZE;
-	if (nla_put_u32(msg, DEVLINK_ATTR_PORT_NUMBER, attrs->port_number))
-		return -EMSGSIZE;
-	if (!attrs->split)
+
+	switch (attrs->flavour) {
+	case DEVLINK_PORT_FLAVOUR_PHYSICAL:
+	case DEVLINK_PORT_FLAVOUR_CPU:
+	case DEVLINK_PORT_FLAVOUR_DSA:
+		if (nla_put_u32(msg, DEVLINK_ATTR_PORT_NUMBER,
+				attrs->port_number))
+			return -EMSGSIZE;
+
+		if (attrs->split &&
+		    (nla_put_u32(msg, DEVLINK_ATTR_PORT_SPLIT_GROUP,
+				 attrs->port_number) ||
+		     nla_put_u32(msg, DEVLINK_ATTR_PORT_SPLIT_SUBPORT_NUMBER,
+				 attrs->split_subport_number)))
+			return -EMSGSIZE;
 		return 0;
-	if (nla_put_u32(msg, DEVLINK_ATTR_PORT_SPLIT_GROUP, attrs->port_number))
-		return -EMSGSIZE;
-	if (nla_put_u32(msg, DEVLINK_ATTR_PORT_SPLIT_SUBPORT_NUMBER,
-			attrs->split_subport_number))
-		return -EMSGSIZE;
-	return 0;
+	case DEVLINK_PORT_FLAVOUR_PCI_VF:
+		if (nla_put_u32(msg, DEVLINK_ATTR_PORT_PCI_VF_NUMBER,
+				attrs->pci.vf_number))
+			return -EMSGSIZE;
+		/* fall through */
+	case DEVLINK_PORT_FLAVOUR_PCI_PF:
+		if (nla_put_u32(msg, DEVLINK_ATTR_PORT_PCI_PF_NUMBER,
+				attrs->pci.pf_number))
+			return -EMSGSIZE;
+		return 0;
+	default:
+		return -EINVAL;
+	}
 }
 
 static int devlink_nl_port_fill(struct sk_buff *msg, struct devlink *devlink,
@@ -5426,6 +5445,10 @@ void devlink_port_attrs_set(struct devlink_port *devlink_port,
 {
 	struct devlink_port_attrs *attrs = &devlink_port->attrs;
 
+	WARN_ON(flavour != DEVLINK_PORT_FLAVOUR_PHYSICAL &&
+		flavour != DEVLINK_PORT_FLAVOUR_CPU &&
+		flavour != DEVLINK_PORT_FLAVOUR_DSA);
+
 	attrs->set = true;
 	attrs->flavour = flavour;
 	attrs->port_number = port_number;
@@ -5434,6 +5457,46 @@ void devlink_port_attrs_set(struct devlink_port *devlink_port,
 	devlink_port_notify(devlink_port, DEVLINK_CMD_PORT_NEW);
 }
 EXPORT_SYMBOL_GPL(devlink_port_attrs_set);
+
+/**
+ *	devlink_port_attrs_pci_pf_set - Set port attributes for a PCI PF port
+ *
+ *	@devlink_port: devlink port
+ *	@pf_number: PCI PF number, in multi-host mapping to hosts depends
+ *	            on the platform
+ */
+void devlink_port_attrs_pci_pf_set(struct devlink_port *devlink_port,
+				   u32 pf_number)
+{
+	struct devlink_port_attrs *attrs = &devlink_port->attrs;
+
+	attrs->set = true;
+	attrs->flavour = DEVLINK_PORT_FLAVOUR_PCI_PF;
+	attrs->pci.pf_number = pf_number;
+	devlink_port_notify(devlink_port, DEVLINK_CMD_PORT_NEW);
+}
+EXPORT_SYMBOL_GPL(devlink_port_attrs_pci_pf_set);
+
+/**
+ *	devlink_port_attrs_pci_vf_set - Set port attributes for a PCI VF port
+ *
+ *	@devlink_port: devlink port
+ *	@pf_number: PCI PF number, in multi-host mapping to hosts depends
+ *	            on the platform
+ *	@vf_number: PCI VF number within given PF (ignored for PF itself)
+ */
+void devlink_port_attrs_pci_vf_set(struct devlink_port *devlink_port,
+				   u32 pf_number, u32 vf_number)
+{
+	struct devlink_port_attrs *attrs = &devlink_port->attrs;
+
+	attrs->set = true;
+	attrs->flavour = DEVLINK_PORT_FLAVOUR_PCI_VF;
+	attrs->pci.pf_number = pf_number;
+	attrs->pci.vf_number = vf_number;
+	devlink_port_notify(devlink_port, DEVLINK_CMD_PORT_NEW);
+}
+EXPORT_SYMBOL_GPL(devlink_port_attrs_pci_vf_set);
 
 int devlink_port_get_phys_port_name(struct devlink_port *devlink_port,
 				    char *name, size_t len)
@@ -5459,6 +5522,13 @@ int devlink_port_get_phys_port_name(struct devlink_port *devlink_port,
 		 */
 		WARN_ON(1);
 		return -EINVAL;
+	case DEVLINK_PORT_FLAVOUR_PCI_PF:
+		n = snprintf(name, len, "pf%u", attrs->pci.pf_number);
+		break;
+	case DEVLINK_PORT_FLAVOUR_PCI_VF:
+		n = snprintf(name, len, "pf%uvf%u",
+			     attrs->pci.pf_number, attrs->pci.vf_number);
+		break;
 	}
 
 	if (n >= len)
