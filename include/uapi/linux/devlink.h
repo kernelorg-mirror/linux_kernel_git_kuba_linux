@@ -338,6 +338,12 @@ enum devlink_attr {
 	DEVLINK_ATTR_PORT_PCI_VF_NUMBER,	/* u32 */
 	DEVLINK_ATTR_PORT_PCI_SUBPORT,		/* u32 */
 
+	DEVLINK_ATTR_PORT_PEER,			/* nested */
+	DEVLINK_ATTR_PORT_PEER_TYPE,		/* u16 */
+	DEVLINK_ATTR_PORT_PEER_NETDEV_IFINDEX,	/* u32 */
+	DEVLINK_ATTR_PORT_PEER_NETDEV_NAME,	/* string */
+	DEVLINK_ATTR_PORT_PEER_IBDEV_NAME,	/* string */
+
 	/* add new attributes above here, update the policy in devlink.c */
 
 	__DEVLINK_ATTR_MAX,

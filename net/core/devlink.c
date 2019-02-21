@@ -552,6 +552,47 @@ static int devlink_nl_port_attrs_put(struct sk_buff *msg,
 	}
 }
 
+static int devlink_nl_port_peer_put(struct sk_buff *msg,
+				    struct devlink_port *devlink_port)
+{
+	struct nlattr *peer_attr;
+
+	if (!devlink_port->type_peer)
+		return 0;
+
+	peer_attr = nla_nest_start(msg, DEVLINK_ATTR_PORT_PEER);
+	if (!peer_attr)
+		return -EMSGSIZE;
+
+	/* Peer's type is got to be the same as the port's type */
+	if (nla_put_u16(msg, DEVLINK_ATTR_PORT_PEER_TYPE, devlink_port->type))
+		goto cancel_peer_attr;
+
+	if (devlink_port->type == DEVLINK_PORT_TYPE_ETH) {
+		struct net_device *netdev = devlink_port->type_peer;
+
+		if (nla_put_u32(msg, DEVLINK_ATTR_PORT_PEER_NETDEV_IFINDEX,
+				netdev->ifindex) ||
+		    nla_put_string(msg, DEVLINK_ATTR_PORT_PEER_NETDEV_NAME,
+				   netdev->name))
+			goto cancel_peer_attr;
+	}
+	if (devlink_port->type == DEVLINK_PORT_TYPE_IB) {
+		struct ib_device *ibdev = devlink_port->type_peer;
+
+		if (ibdev &&
+		    nla_put_string(msg, DEVLINK_ATTR_PORT_PEER_IBDEV_NAME,
+				   ibdev->name))
+			goto cancel_peer_attr;
+	}
+	nla_nest_end(msg, peer_attr);
+	return 0;
+
+cancel_peer_attr:
+	nla_nest_cancel(msg, peer_attr);
+	return -EMSGSIZE;
+}
+
 static int devlink_nl_port_fill(struct sk_buff *msg, struct devlink *devlink,
 				struct devlink_port *devlink_port,
 				enum devlink_command cmd, u32 portid,
@@ -592,6 +633,8 @@ static int devlink_nl_port_fill(struct sk_buff *msg, struct devlink *devlink,
 			goto nla_put_failure;
 	}
 	if (devlink_nl_port_attrs_put(msg, devlink_port))
+		goto nla_put_failure;
+	if (devlink_nl_port_peer_put(msg, devlink_port))
 		goto nla_put_failure;
 
 	genlmsg_end(msg, hdr);
@@ -5385,10 +5428,11 @@ EXPORT_SYMBOL_GPL(devlink_port_unregister);
 
 static void __devlink_port_type_set(struct devlink_port *devlink_port,
 				    enum devlink_port_type type,
-				    void *type_dev)
+				    void *type_dev, void *type_peer)
 {
 	devlink_port->type = type;
 	devlink_port->type_dev = type_dev;
+	devlink_port->type_peer = type_peer;
 	devlink_port_notify(devlink_port, DEVLINK_CMD_PORT_NEW);
 }
 
@@ -5402,9 +5446,25 @@ void devlink_port_type_eth_set(struct devlink_port *devlink_port,
 			       struct net_device *netdev)
 {
 	return __devlink_port_type_set(devlink_port,
-				       DEVLINK_PORT_TYPE_ETH, netdev);
+				       DEVLINK_PORT_TYPE_ETH, netdev, NULL);
 }
 EXPORT_SYMBOL_GPL(devlink_port_type_eth_set);
+
+/**
+ *	devlink_port_type_eth_set_peer - Set port type to Ethernet with peer
+ *
+ *	@devlink_port: devlink port
+ *	@netdev: related netdevice
+ *	@peer: for PCIe ports the non-port netdev (actual VF or PF)
+ */
+void devlink_port_type_eth_set_peer(struct devlink_port *devlink_port,
+				    struct net_device *netdev,
+				    struct net_device *peer)
+{
+	return __devlink_port_type_set(devlink_port,
+				       DEVLINK_PORT_TYPE_ETH, netdev, peer);
+}
+EXPORT_SYMBOL_GPL(devlink_port_type_eth_set_peer);
 
 /**
  *	devlink_port_type_ib_set - Set port type to InfiniBand
@@ -5416,7 +5476,7 @@ void devlink_port_type_ib_set(struct devlink_port *devlink_port,
 			      struct ib_device *ibdev)
 {
 	return __devlink_port_type_set(devlink_port,
-				       DEVLINK_PORT_TYPE_IB, ibdev);
+				       DEVLINK_PORT_TYPE_IB, ibdev, NULL);
 }
 EXPORT_SYMBOL_GPL(devlink_port_type_ib_set);
 
@@ -5428,7 +5488,7 @@ EXPORT_SYMBOL_GPL(devlink_port_type_ib_set);
 void devlink_port_type_clear(struct devlink_port *devlink_port)
 {
 	return __devlink_port_type_set(devlink_port,
-				       DEVLINK_PORT_TYPE_NOTSET, NULL);
+				       DEVLINK_PORT_TYPE_NOTSET, NULL, NULL);
 }
 EXPORT_SYMBOL_GPL(devlink_port_type_clear);
 

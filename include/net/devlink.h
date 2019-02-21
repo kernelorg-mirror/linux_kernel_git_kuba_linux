@@ -68,6 +68,7 @@ struct devlink_port {
 	enum devlink_port_type type;
 	enum devlink_port_type desired_type;
 	void *type_dev;
+	void *type_peer;
 	struct devlink_port_attrs attrs;
 };
 
@@ -578,6 +579,9 @@ int devlink_port_register(struct devlink *devlink,
 void devlink_port_unregister(struct devlink_port *devlink_port);
 void devlink_port_type_eth_set(struct devlink_port *devlink_port,
 			       struct net_device *netdev);
+void devlink_port_type_eth_set_peer(struct devlink_port *devlink_port,
+				    struct net_device *netdev,
+				    struct net_device *peer);
 void devlink_port_type_ib_set(struct devlink_port *devlink_port,
 			      struct ib_device *ibdev);
 void devlink_port_type_clear(struct devlink_port *devlink_port);
@@ -789,6 +793,13 @@ static inline void devlink_port_unregister(struct devlink_port *devlink_port)
 
 static inline void devlink_port_type_eth_set(struct devlink_port *devlink_port,
 					     struct net_device *netdev)
+{
+}
+
+static inline void
+devlink_port_type_eth_set_peer(struct devlink_port *devlink_port,
+			       struct net_device *netdev,
+			       struct net_device *peer)
 {
 }
 
