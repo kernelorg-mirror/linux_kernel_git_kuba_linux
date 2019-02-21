@@ -541,6 +541,11 @@ static int devlink_nl_port_attrs_put(struct sk_buff *msg,
 		if (nla_put_u32(msg, DEVLINK_ATTR_PORT_PCI_PF_NUMBER,
 				attrs->pci.pf_number))
 			return -EMSGSIZE;
+
+		if (attrs->pci.multiport &&
+		    nla_put_u32(msg, DEVLINK_ATTR_PORT_PCI_SUBPORT,
+				attrs->pci.subport_number))
+			return -EMSGSIZE;
 		return 0;
 	default:
 		return -EINVAL;
@@ -5464,15 +5469,20 @@ EXPORT_SYMBOL_GPL(devlink_port_attrs_set);
  *	@devlink_port: devlink port
  *	@pf_number: PCI PF number, in multi-host mapping to hosts depends
  *	            on the platform
+ *	@multiport: PCI function has more than one logical port
+ *	@subport_number: PCI function has more than one logical port
  */
 void devlink_port_attrs_pci_pf_set(struct devlink_port *devlink_port,
-				   u32 pf_number)
+				   u32 pf_number, bool multiport,
+				   u32 subport_number)
 {
 	struct devlink_port_attrs *attrs = &devlink_port->attrs;
 
 	attrs->set = true;
 	attrs->flavour = DEVLINK_PORT_FLAVOUR_PCI_PF;
 	attrs->pci.pf_number = pf_number;
+	attrs->pci.multiport = multiport;
+	attrs->pci.subport_number = subport_number;
 	devlink_port_notify(devlink_port, DEVLINK_CMD_PORT_NEW);
 }
 EXPORT_SYMBOL_GPL(devlink_port_attrs_pci_pf_set);
@@ -5484,9 +5494,12 @@ EXPORT_SYMBOL_GPL(devlink_port_attrs_pci_pf_set);
  *	@pf_number: PCI PF number, in multi-host mapping to hosts depends
  *	            on the platform
  *	@vf_number: PCI VF number within given PF (ignored for PF itself)
+ *	@multiport: PCI function has more than one logical port
+ *	@subport_number: PCI function has more than one logical port
  */
 void devlink_port_attrs_pci_vf_set(struct devlink_port *devlink_port,
-				   u32 pf_number, u32 vf_number)
+				   u32 pf_number, u32 vf_number, bool multiport,
+				   u32 subport_number)
 {
 	struct devlink_port_attrs *attrs = &devlink_port->attrs;
 
@@ -5494,6 +5507,8 @@ void devlink_port_attrs_pci_vf_set(struct devlink_port *devlink_port,
 	attrs->flavour = DEVLINK_PORT_FLAVOUR_PCI_VF;
 	attrs->pci.pf_number = pf_number;
 	attrs->pci.vf_number = vf_number;
+	attrs->pci.multiport = multiport;
+	attrs->pci.subport_number = subport_number;
 	devlink_port_notify(devlink_port, DEVLINK_CMD_PORT_NEW);
 }
 EXPORT_SYMBOL_GPL(devlink_port_attrs_pci_vf_set);
@@ -5523,11 +5538,22 @@ int devlink_port_get_phys_port_name(struct devlink_port *devlink_port,
 		WARN_ON(1);
 		return -EINVAL;
 	case DEVLINK_PORT_FLAVOUR_PCI_PF:
-		n = snprintf(name, len, "pf%u", attrs->pci.pf_number);
+		if (!attrs->pci.multiport)
+			n = snprintf(name, len, "pf%u", attrs->pci.pf_number);
+		else
+			n = snprintf(name, len, "pf%us%u", attrs->pci.pf_number,
+				     attrs->pci.subport_number);
 		break;
 	case DEVLINK_PORT_FLAVOUR_PCI_VF:
-		n = snprintf(name, len, "pf%uvf%u",
-			     attrs->pci.pf_number, attrs->pci.vf_number);
+		if (!attrs->pci.multiport)
+			n = snprintf(name, len, "pf%uvf%u",
+				     attrs->pci.pf_number,
+				     attrs->pci.vf_number);
+		else
+			n = snprintf(name, len, "pf%uvf%us%u",
+				     attrs->pci.pf_number,
+				     attrs->pci.vf_number,
+				     attrs->pci.subport_number);
 		break;
 	}
 

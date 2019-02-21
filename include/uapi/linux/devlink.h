@@ -336,6 +336,7 @@ enum devlink_attr {
 
 	DEVLINK_ATTR_PORT_PCI_PF_NUMBER,	/* u32 */
 	DEVLINK_ATTR_PORT_PCI_VF_NUMBER,	/* u32 */
+	DEVLINK_ATTR_PORT_PCI_SUBPORT,		/* u32 */
 
 	/* add new attributes above here, update the policy in devlink.c */
 

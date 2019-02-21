@@ -53,6 +53,8 @@ struct devlink_port_attrs {
 		struct {
 			u32 pf_number;
 			u32 vf_number;
+			bool multiport;
+			u32 subport_number;
 		} pci;
 	};
 };
@@ -584,9 +586,11 @@ void devlink_port_attrs_set(struct devlink_port *devlink_port,
 			    u32 port_number, bool split,
 			    u32 split_subport_number);
 void devlink_port_attrs_pci_pf_set(struct devlink_port *devlink_port,
-				   u32 pf_number);
+				   u32 pf_number, bool multiport,
+				   u32 subport_number);
 void devlink_port_attrs_pci_vf_set(struct devlink_port *devlink_port,
-				   u32 pf_number, u32 vf_number);
+				   u32 pf_number, u32 vf_number, bool multiport,
+				   u32 subport_number);
 int devlink_port_get_phys_port_name(struct devlink_port *devlink_port,
 				    char *name, size_t len);
 int devlink_sb_register(struct devlink *devlink, unsigned int sb_index,
@@ -806,13 +810,14 @@ static inline void devlink_port_attrs_set(struct devlink_port *devlink_port,
 
 static inline void
 devlink_port_attrs_pci_pf_set(struct devlink_port *devlink_port,
-			      u32 pf_number)
+			      u32 pf_number, bool multiport, u32 subport_number)
 {
 }
 
 static inline void
 devlink_port_attrs_pci_vf_set(struct devlink_port *devlink_port,
-			      u32 pf_number, u32 vf_number)
+			      u32 pf_number, u32 vf_number, bool multiport,
+			      u32 subport_number)
 {
 }
 

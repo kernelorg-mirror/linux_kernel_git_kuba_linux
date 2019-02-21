@@ -392,12 +392,14 @@ int nfp_devlink_port_register(struct nfp_app *app, struct nfp_port *port)
 	case NFP_PORT_PHYS_PORT:
 		return nfp_devlink_port_register_phys(devlink, port);
 	case NFP_PORT_PF_PORT:
-		devlink_port_attrs_pci_pf_set(&port->dl_port, port->pf_id);
+		devlink_port_attrs_pci_pf_set(&port->dl_port, port->pf_id,
+					      port->pf_split,
+					      port->pf_split_id);
 		id = nfp_devlink_port_gen_pci_port_id(port);
 		return devlink_port_register(devlink, &port->dl_port, id);
 	case NFP_PORT_VF_PORT:
 		devlink_port_attrs_pci_vf_set(&port->dl_port, port->pf_id,
-					      port->vf_id);
+					      port->vf_id, false, 0);
 		id = nfp_devlink_port_gen_pci_port_id(port);
 		return devlink_port_register(devlink, &port->dl_port, id);
 	default:
