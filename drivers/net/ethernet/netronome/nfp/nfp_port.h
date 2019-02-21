@@ -51,6 +51,7 @@ enum nfp_port_flags {
  * @eth_forced:	for %NFP_PORT_PHYS_PORT port is forced UP or DOWN, don't change
  * @eth_port:	for %NFP_PORT_PHYS_PORT translated ETH Table port entry
  * @eth_stats:	for %NFP_PORT_PHYS_PORT MAC stats if available
+ * @peer:	for %NFP_PORT_PF_PORT netdev of the actual vNIC, if reachable
  * @pf_id:	for %NFP_PORT_PF_PORT, %NFP_PORT_VF_PORT ID of the PCI PF (0-3)
  * @vf_id:	for %NFP_PORT_VF_PORT ID of the PCI VF within @pf_id
  * @pf_split:	for %NFP_PORT_PF_PORT %true if PCI PF has more than one vNIC
@@ -79,6 +80,7 @@ struct nfp_port {
 		};
 		/* NFP_PORT_PF_PORT, NFP_PORT_VF_PORT */
 		struct {
+			struct net_device *peer;
 			unsigned int pf_id;
 			unsigned int vf_id;
 			bool pf_split;

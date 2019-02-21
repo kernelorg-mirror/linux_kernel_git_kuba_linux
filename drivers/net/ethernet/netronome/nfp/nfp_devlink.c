@@ -414,7 +414,15 @@ void nfp_devlink_port_unregister(struct nfp_port *port)
 
 void nfp_devlink_port_set_type(struct nfp_app *app, struct nfp_port *port)
 {
-	devlink_port_type_eth_set(&port->dl_port, port->netdev);
+	switch (port->type) {
+	case NFP_PORT_PF_PORT:
+		devlink_port_type_eth_set_peer(&port->dl_port, port->netdev,
+					       port->peer);
+		break;
+	default:
+		devlink_port_type_eth_set(&port->dl_port, port->netdev);
+		break;
+	}
 }
 
 void nfp_devlink_port_clear_type(struct nfp_port *port)

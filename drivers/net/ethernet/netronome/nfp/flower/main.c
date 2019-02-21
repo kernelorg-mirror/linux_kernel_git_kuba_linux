@@ -300,6 +300,7 @@ nfp_flower_spawn_vnic_reprs(struct nfp_app *app,
 		if (repr_type == NFP_REPR_TYPE_PF) {
 			port->pf_id = i;
 			port->vnic = priv->nn->dp.ctrl_bar;
+			port->peer = priv->nn->dp.netdev;
 		} else {
 			port->pf_id = 0;
 			port->vf_id = i;

@@ -113,6 +113,7 @@ nfp_abm_spawn_repr(struct nfp_app *app, struct nfp_abm_link *alink,
 		port->pf_id = alink->abm->pf_id;
 		port->pf_split = app->pf->max_data_vnics > 1;
 		port->pf_split_id = alink->id;
+		port->peer = alink->vnic->dp.netdev;
 		port->vnic = alink->vnic->dp.ctrl_bar;
 	}
 
