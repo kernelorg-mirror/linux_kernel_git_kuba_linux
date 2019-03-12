@@ -9,6 +9,8 @@
 #include <net/hstats.h>
 #include <net/netlink.h>
 
+/* TODO: bug on hstat -i $ifc */
+
 /* We deploy a simple stack-based dumper to walk the hierarchies.
  * This is the documentation format for quick analysis of the state machine:
  *
