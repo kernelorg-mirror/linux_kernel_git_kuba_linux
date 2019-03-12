@@ -16,11 +16,12 @@ Once statistic is exposed via *hstats* it should not be added to `ethtool -S`
 (drivers which already expose it can keep doing so, but no new driver allowed).
 
 Apart from common statistics identifiers *hstats* provide:
- - clear indication if statistic is maintained (unlike more compact
-   fixed-structure stats, e.g. `struct rtnl_link_stats64`);
+ - clear indication whether statistic is maintained (unlike more compact
+   fixed-structure stats, e.g. `struct rtnl_link_stats64` which would always
+   report zero for unmaintained statistics);
  - hierarchical structure (see :ref:`groups` and :ref:`hierarchies`);
  - exposes :ref:`qualifiers` - these are attributes of the statistics which
-   help determine the source of the statistics;
+   help determine the source of the statistics (device vs driver);
  - provide flexible grouping mechanism which should reduce code duplication
    amongst drivers.
 
@@ -80,6 +81,11 @@ Each rectangle represents a root level `IFLA_STATS_LINK_HSTATS`.  Users should
 be able to add all `IFLA_HSTATS_STAT_IEEE8023_FramesOK` within each of those
 groups, and compare them to see at which stage of the processing pipeline
 packets disappear.
+
+Drivers should report groups in order from wire to software.  The statistics
+counted closest to the wire go first.
+Because the dumping logic uses a stack - the output (netlink dump) will contain
+the groups from software to wire matching the common `ethtool -S` ordering.
 
 .. _qualifiers:
 
