@@ -438,6 +438,7 @@ int nfp_net_hstat_get_groups(const struct net_device *netdev,
 {
 	struct nfp_port *port;
 
+	/* TODO: reverse the order */
 	rtnl_hstat_add_grp(req, &nfp_hstat_vnic_sw);
 	rtnl_hstat_add_grp(req, &nfp_hstat_vnic_nfd_pq);
 	rtnl_hstat_add_grp(req, &nfp_hstat_vnic_nfd);
