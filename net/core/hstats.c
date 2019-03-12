@@ -9,8 +9,6 @@
 #include <net/hstats.h>
 #include <net/netlink.h>
 
-/* TODO: bug on hstat -i $ifc */
-
 /* We deploy a simple stack-based dumper to walk the hierarchies.
  * This is the documentation format for quick analysis of the state machine:
  *
@@ -631,7 +629,8 @@ __rtnl_get_link_hstats(struct sk_buff *skb, const struct net_device *const_dev,
 	struct rtnl_hstat_req req;
 	ssize_t ret;
 
-	if (!dev->netdev_ops || !dev->netdev_ops->ndo_hstat_get_groups)
+	if (!const_dev->netdev_ops ||
+	    !const_dev->netdev_ops->ndo_hstat_get_groups)
 		return -ENODATA;
 
 	dumper = hstat_dumper_init(skb, const_dev, dev, prividx);
@@ -641,7 +640,7 @@ __rtnl_get_link_hstats(struct sk_buff *skb, const struct net_device *const_dev,
 	memset(&req, 0, sizeof(req));
 	req.dumper = dumper;
 
-	ret = dev->netdev_ops->ndo_hstat_get_groups(dev, &req);
+	ret = const_dev->netdev_ops->ndo_hstat_get_groups(const_dev, &req);
 	if (ret < 0)
 		goto exit_dumper_destroy;
 	ret = req.err;
