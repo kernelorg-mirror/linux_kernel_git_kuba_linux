@@ -376,13 +376,6 @@ nfp_devlink_port_register_phys(struct devlink *devlink, struct nfp_port *port)
 #define NFP_DEVLINK_PORT_PCI_PORT_ID_VF_OFF	1000
 #define NFP_DEVLINK_PORT_PCI_PORT_ID_SUB_OFF	1
 
-static u32 nfp_devlink_port_gen_pci_port_id(struct nfp_port *port)
-{
-	return (port->pf_id + 1) * NFP_DEVLINK_PORT_PCI_PORT_ID_PF_OFF +
-	       (port->vf_id + 1) * NFP_DEVLINK_PORT_PCI_PORT_ID_VF_OFF +
-		port->pf_split_id * NFP_DEVLINK_PORT_PCI_PORT_ID_SUB_OFF;
-}
-
 int nfp_devlink_port_register(struct nfp_app *app, struct nfp_port *port)
 {
 	struct devlink *devlink = priv_to_devlink(app->pf);
@@ -395,12 +388,14 @@ int nfp_devlink_port_register(struct nfp_app *app, struct nfp_port *port)
 		devlink_port_attrs_pci_pf_set(&port->dl_port, port->pf_id,
 					      port->pf_split,
 					      port->pf_split_id);
-		id = nfp_devlink_port_gen_pci_port_id(port);
+		id = (port->pf_id + 1) * NFP_DEVLINK_PORT_PCI_PORT_ID_PF_OFF +
+		      port->pf_split_id * NFP_DEVLINK_PORT_PCI_PORT_ID_SUB_OFF;
 		return devlink_port_register(devlink, &port->dl_port, id);
 	case NFP_PORT_VF_PORT:
 		devlink_port_attrs_pci_vf_set(&port->dl_port, port->pf_id,
 					      port->vf_id, false, 0);
-		id = nfp_devlink_port_gen_pci_port_id(port);
+		id = (port->pf_id + 1) * NFP_DEVLINK_PORT_PCI_PORT_ID_PF_OFF +
+		     (port->vf_id + 1) * NFP_DEVLINK_PORT_PCI_PORT_ID_VF_OFF;
 		return devlink_port_register(devlink, &port->dl_port, id);
 	default:
 		return -EINVAL;
