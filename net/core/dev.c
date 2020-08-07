@@ -1525,8 +1525,11 @@ static int __dev_open(struct net_device *dev, struct netlink_ext_ack *extack)
 	if (!ret && ops->ndo_open)
 		ret = ops->ndo_open(dev);
 
-	list_for_each_entry(n, &dev->napi_list, dev_list)
-		napi_thread_start(n);
+	if (dev->napi_threaded)
+		list_for_each_entry(n, &dev->napi_list, dev_list) {
+			set_bit(NAPI_STATE_THREADED, &n->state);
+			napi_thread_start(n);
+		}
 
 	netpoll_poll_enable(dev);
 
@@ -1621,8 +1624,10 @@ static void __dev_close_many(struct list_head *head)
 		if (ops->ndo_stop)
 			ops->ndo_stop(dev);
 
-		list_for_each_entry(n, &dev->napi_list, dev_list)
+		list_for_each_entry(n, &dev->napi_list, dev_list) {
 			napi_thread_stop(n);
+			clear_bit(NAPI_STATE_THREADED, &n->state);
+		}
 
 		dev->flags &= ~IFF_UP;
 		netpoll_poll_enable(dev);
@@ -6705,6 +6710,10 @@ void netif_napi_add(struct net_device *dev, struct napi_struct *napi,
 #endif
 	set_bit(NAPI_STATE_SCHED, &napi->state);
 	napi_hash_add(napi);
+	if (dev->flags & IFF_UP && dev->napi_threaded) {
+		set_bit(NAPI_STATE_THREADED, &napi->state);
+		napi_thread_start(napi);
+	}
 }
 EXPORT_SYMBOL(netif_napi_add);
 
@@ -6741,6 +6750,7 @@ static void flush_gro_hash(struct napi_struct *napi)
 void netif_napi_del(struct napi_struct *napi)
 {
 	might_sleep();
+	napi_thread_stop(napi);
 	if (napi_hash_del(napi))
 		synchronize_net();
 	list_del_init(&napi->dev_list);
@@ -6814,30 +6824,6 @@ static int napi_threaded_poll(void *data)
 	}
 	return 0;
 }
-
-int napi_set_threaded(struct napi_struct *n, bool threaded)
-{
-	ASSERT_RTNL();
-
-	if (n->dev->flags & IFF_UP)
-		return -EBUSY;
-
-	if (threaded == !!test_bit(NAPI_STATE_THREADED, &n->state))
-		return 0;
-	if (threaded)
-		set_bit(NAPI_STATE_THREADED, &n->state);
-	else
-		clear_bit(NAPI_STATE_THREADED, &n->state);
-
-	/* if the device is initializing, nothing todo */
-	if (test_bit(__LINK_STATE_START, &n->dev->state))
-		return 0;
-
-	napi_thread_stop(n);
-	napi_thread_start(n);
-	return 0;
-}
-EXPORT_SYMBOL(napi_set_threaded);
 
 static __latent_entropy void net_rx_action(struct softirq_action *h)
 {
