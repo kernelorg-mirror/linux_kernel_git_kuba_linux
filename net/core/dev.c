@@ -1492,9 +1492,11 @@ static int thread_dev_tapi(void *data);
 
 static void napi_thread_start(struct napi_struct *n)
 {
-	if (test_bit(NAPI_STATE_THREADED, &n->state) && !n->thread)
+	if (test_bit(NAPI_STATE_THREADED, &n->state) && !n->thread) {
+		n->last_poll = ktime_get_ns();
 		n->thread = kthread_create(thread_dev_tapi, n->dev, "%s-%d",
 					   n->dev->name, n->napi_id);
+	}
 }
 
 static int __dev_open(struct net_device *dev, struct netlink_ext_ack *extack)
@@ -6254,10 +6256,11 @@ static bool sd_has_rps_ipi_waiting(struct softnet_data *sd)
 #endif
 }
 
-u32 TAPI_LOCAL_BIAS_TIME = 50;
-u32 TAPI_UNREADY_TIME = 75;
+u32 TAPI_LOCAL_BIAS_TIME_NS = 100 * 1000;
+u32 TAPI_UNREADY_TIME_NS = 200 * 1000;
 u32 TAPI_BREAK_MIN = 50;
-u32 TAPI_BREAK_MAX = 125;
+u32 TAPI_BREAK_MAX = 100;
+u32 TAPI_IDLE_MUL_MAX = 10;
 
 bool TAPI_POLLING = false;
 
@@ -6851,7 +6854,7 @@ static struct napi_struct *find_ripe_napi(struct net_device *dev)
 
 		biased_time = napi->last_poll;
 		if (napi->last_poll_thread == current)
-			biased_time -= TAPI_LOCAL_BIAS_TIME;
+			biased_time -= TAPI_LOCAL_BIAS_TIME_NS;
 
 		if (biased_time >= oldest_poll)
 			continue;
@@ -6859,7 +6862,8 @@ static struct napi_struct *find_ripe_napi(struct net_device *dev)
 		most_ripe = napi;
 	}
 
-	if (TAPI_POLLING && oldest_poll > ktime_get_ns() - TAPI_UNREADY_TIME)
+	if (TAPI_POLLING && most_ripe &&
+	    most_ripe->last_poll > ktime_get_ns() - TAPI_UNREADY_TIME_NS)
 		return NULL;
 
 	return most_ripe;
@@ -6868,6 +6872,7 @@ static struct napi_struct *find_ripe_napi(struct net_device *dev)
 static int thread_dev_tapi(void *data)
 {
 	struct net_device *dev = data;
+	u32 idle;
 
 	while (!kthread_should_stop()) {
 		struct napi_struct *napi;
@@ -6876,8 +6881,12 @@ static int thread_dev_tapi(void *data)
 
 		napi = find_ripe_napi(dev);
 		if (!napi) {
-			usleep_range(TAPI_BREAK_MIN, TAPI_BREAK_MAX);
+			idle = idle >= TAPI_IDLE_MUL_MAX ? idle : idle + 1;
+			usleep_range(idle * TAPI_BREAK_MIN,
+				     idle * TAPI_BREAK_MAX);
 			continue;
+		} else {
+			idle = 0;
 		}
 
 		if (test_and_set_bit(NAPI_STATE_CLAIMED, &napi->state))
@@ -10800,11 +10809,12 @@ static int __init net_dev_init(void)
 	BUG_ON(!dev_boot_phase);
 
 	debugfs_create_u32("tapi_local_bias", 0666, NULL,
-			   &TAPI_LOCAL_BIAS_TIME);
-	debugfs_create_u32("tapi_unready", 0666, NULL, &TAPI_UNREADY_TIME);
+			   &TAPI_LOCAL_BIAS_TIME_NS);
+	debugfs_create_u32("tapi_unready", 0666, NULL, &TAPI_UNREADY_TIME_NS);
 	debugfs_create_u32("tapi_break_min", 0666, NULL, &TAPI_BREAK_MIN);
 	debugfs_create_u32("tapi_break_max", 0666, NULL, &TAPI_BREAK_MAX);
 	debugfs_create_bool("tapi_polling", 0666, NULL, &TAPI_POLLING);
+	debugfs_create_u32("tapi_max_idle", 0666, NULL, &TAPI_IDLE_MUL_MAX);
 
 	if (dev_proc_init())
 		goto out;
