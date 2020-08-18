@@ -70,6 +70,7 @@
 
 #include <linux/uaccess.h>
 #include <linux/bitops.h>
+#include <linux/debugfs.h>
 #include <linux/capability.h>
 #include <linux/cpu.h>
 #include <linux/types.h>
@@ -1487,11 +1488,12 @@ void netdev_notify_peers(struct net_device *dev)
 EXPORT_SYMBOL(netdev_notify_peers);
 
 static int napi_threaded_poll(void *data);
+static int thread_dev_tapi(void *data);
 
 static void napi_thread_start(struct napi_struct *n)
 {
 	if (test_bit(NAPI_STATE_THREADED, &n->state) && !n->thread)
-		n->thread = kthread_create(napi_threaded_poll, n, "%s-%d",
+		n->thread = kthread_create(thread_dev_tapi, n->dev, "%s-%d",
 					   n->dev->name, n->napi_id);
 }
 
@@ -6252,6 +6254,13 @@ static bool sd_has_rps_ipi_waiting(struct softnet_data *sd)
 #endif
 }
 
+u32 TAPI_LOCAL_BIAS_TIME = 50;
+u32 TAPI_UNREADY_TIME = 75;
+u32 TAPI_BREAK_MIN = 50;
+u32 TAPI_BREAK_MAX = 125;
+
+bool TAPI_POLLING = false;
+
 static int process_backlog(struct napi_struct *napi, int quota)
 {
 	struct softnet_data *sd = container_of(napi, struct softnet_data, backlog);
@@ -6378,7 +6387,8 @@ bool napi_complete_done(struct napi_struct *n, int work_done)
 	 *    the guarantee we will be called later.
 	 */
 	if (unlikely(n->state & (NAPIF_STATE_NPSVC |
-				 NAPIF_STATE_IN_BUSY_POLL)))
+				 NAPIF_STATE_IN_BUSY_POLL)) ||
+	    TAPI_POLLING)
 		return false;
 
 	if (work_done) {
@@ -6822,6 +6832,77 @@ static int napi_threaded_poll(void *data)
 		}
 
 	}
+	return 0;
+}
+
+static struct napi_struct *find_ripe_napi(struct net_device *dev)
+{
+	struct napi_struct *napi, *most_ripe = NULL;
+	u64 oldest_poll = U64_MAX;
+
+	list_for_each_entry(napi, &dev->napi_list, dev_list) {
+		u64 biased_time;
+
+		/* if TAPI_POLLING is set SCHED is never cleared */
+		if (napi->state & (NAPIF_STATE_DISABLE |
+				   NAPIF_STATE_CLAIMED) ||
+		    !test_bit(NAPI_STATE_SCHED, &napi->state))
+			continue;
+
+		biased_time = napi->last_poll;
+		if (napi->last_poll_thread == current)
+			biased_time -= TAPI_LOCAL_BIAS_TIME;
+
+		if (biased_time >= oldest_poll)
+			continue;
+		oldest_poll = biased_time;
+		most_ripe = napi;
+	}
+
+	if (TAPI_POLLING && oldest_poll > ktime_get_ns() - TAPI_UNREADY_TIME)
+		return NULL;
+
+	return most_ripe;
+}
+
+static int thread_dev_tapi(void *data)
+{
+	struct net_device *dev = data;
+
+	while (!kthread_should_stop()) {
+		struct napi_struct *napi;
+		bool repoll;
+		void *have;
+
+		napi = find_ripe_napi(dev);
+		if (!napi) {
+			usleep_range(TAPI_BREAK_MIN, TAPI_BREAK_MAX);
+			continue;
+		}
+
+		if (test_and_set_bit(NAPI_STATE_CLAIMED, &napi->state))
+			continue;
+
+		do {
+			repoll = false;
+			local_bh_disable();
+
+			have = netpoll_poll_lock(napi);
+			__napi_poll(napi, &repoll);
+			netpoll_poll_unlock(have);
+
+			__kfree_skb_flush();
+			local_bh_enable();
+
+		} while (!need_resched() && repoll);
+
+		napi->last_poll = ktime_get_ns();
+		napi->last_poll_thread = current;
+		clear_bit(NAPI_STATE_CLAIMED, &napi->state);
+
+		cond_resched();
+	}
+
 	return 0;
 }
 
@@ -10717,6 +10798,13 @@ static int __init net_dev_init(void)
 	int i, rc = -ENOMEM;
 
 	BUG_ON(!dev_boot_phase);
+
+	debugfs_create_u32("tapi_local_bias", 0666, NULL,
+			   &TAPI_LOCAL_BIAS_TIME);
+	debugfs_create_u32("tapi_unready", 0666, NULL, &TAPI_UNREADY_TIME);
+	debugfs_create_u32("tapi_break_min", 0666, NULL, &TAPI_BREAK_MIN);
+	debugfs_create_u32("tapi_break_max", 0666, NULL, &TAPI_BREAK_MAX);
+	debugfs_create_bool("tapi_polling", 0666, NULL, &TAPI_POLLING);
 
 	if (dev_proc_init())
 		goto out;

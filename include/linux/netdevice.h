@@ -345,7 +345,10 @@ struct napi_struct {
 	struct list_head	dev_list;
 	struct hlist_node	napi_hash_node;
 	unsigned int		napi_id;
+
 	struct task_struct	*thread;
+	u64			last_poll;
+	struct task_struct	*last_poll_thread;
 };
 
 enum {
@@ -357,6 +360,7 @@ enum {
 	NAPI_STATE_NO_BUSY_POLL,/* Do not add in napi_hash, no busy polling */
 	NAPI_STATE_IN_BUSY_POLL,/* sk_busy_loop() owns this NAPI */
 	NAPI_STATE_THREADED,	/* The poll is performed inside its own thread*/
+	NAPI_STATE_CLAIMED,
 };
 
 enum {
@@ -368,6 +372,7 @@ enum {
 	NAPIF_STATE_NO_BUSY_POLL = BIT(NAPI_STATE_NO_BUSY_POLL),
 	NAPIF_STATE_IN_BUSY_POLL = BIT(NAPI_STATE_IN_BUSY_POLL),
 	NAPIF_STATE_THREADED	 = BIT(NAPI_STATE_THREADED),
+	NAPIF_STATE_CLAIMED	 = BIT(NAPI_STATE_CLAIMED),
 };
 
 enum gro_result {
