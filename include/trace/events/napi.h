@@ -55,9 +55,9 @@ TRACE_EVENT(napi_poller_enter,
 
 TRACE_EVENT(napi_poller_select,
 
-	TP_PROTO(struct napi_struct *napi, int since_poll),
+	TP_PROTO(struct napi_struct *napi),
 
-	TP_ARGS(napi, since_poll),
+	TP_ARGS(napi),
 
 	TP_STRUCT__entry(
 		__field(	struct napi_struct *,	napi)
@@ -67,7 +67,7 @@ TRACE_EVENT(napi_poller_select,
 
 	TP_fast_assign(
 		__entry->napi = napi;
-		__entry->since_poll = since_poll;
+		__entry->since_poll = ktime_get_ns() - napi->last_poll;
 		__entry->local = napi->last_poll_thread == current;
 	),
 
