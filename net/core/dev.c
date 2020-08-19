@@ -6846,7 +6846,7 @@ static int napi_threaded_poll(void *data)
 static struct napi_struct *find_ripe_napi(struct net_device *dev)
 {
 	struct napi_struct *napi, *most_ripe = NULL;
-	u64 oldest_poll = U64_MAX, since_poll;
+	u64 oldest_poll = U64_MAX;
 
 	list_for_each_entry(napi, &dev->napi_list, dev_list) {
 		u64 biased_time;
