@@ -6262,6 +6262,9 @@ u32 TAPI_BREAK_MIN = 50;
 u32 TAPI_BREAK_MAX = 100;
 u32 TAPI_IDLE_MUL_MAX = 10;
 
+u64 TAPI_CNT_LOCAL;
+u64 TAPI_CNT_STEAL;
+
 bool TAPI_POLLING = false;
 
 static int process_backlog(struct napi_struct *napi, int quota)
@@ -6841,7 +6844,7 @@ static int napi_threaded_poll(void *data)
 static struct napi_struct *find_ripe_napi(struct net_device *dev)
 {
 	struct napi_struct *napi, *most_ripe = NULL;
-	u64 oldest_poll = U64_MAX;
+	u64 oldest_poll = U64_MAX, since_poll;
 
 	list_for_each_entry(napi, &dev->napi_list, dev_list) {
 		u64 biased_time;
@@ -6862,9 +6865,20 @@ static struct napi_struct *find_ripe_napi(struct net_device *dev)
 		most_ripe = napi;
 	}
 
-	if (TAPI_POLLING && most_ripe &&
-	    most_ripe->last_poll > ktime_get_ns() - TAPI_UNREADY_TIME_NS)
+	if (!most_ripe)
 		return NULL;
+
+	since_poll = ktime_get_ns() - most_ripe->last_poll;
+
+	if (TAPI_POLLING && since_poll < TAPI_UNREADY_TIME_NS)
+		return NULL;
+
+	trace_napi_poller_select(most_ripe, since_poll);
+
+	if (most_ripe->last_poll_thread == current)
+		TAPI_CNT_LOCAL++;
+	else
+		TAPI_CNT_STEAL++;
 
 	return most_ripe;
 }
@@ -6882,8 +6896,10 @@ static int thread_dev_tapi(void *data)
 		napi = find_ripe_napi(dev);
 		if (!napi) {
 			idle = idle >= TAPI_IDLE_MUL_MAX ? idle : idle + 1;
+			trace_napi_poller_exit(idle);
 			usleep_range(idle * TAPI_BREAK_MIN,
 				     idle * TAPI_BREAK_MAX);
+			trace_napi_poller_enter(idle);
 			continue;
 		} else {
 			idle = 0;
@@ -6909,7 +6925,11 @@ static int thread_dev_tapi(void *data)
 		napi->last_poll_thread = current;
 		clear_bit(NAPI_STATE_CLAIMED, &napi->state);
 
-		cond_resched();
+		if (need_resched()) {
+			trace_napi_poller_exit(0);
+			cond_resched();
+			trace_napi_poller_enter(0);
+		}
 	}
 
 	return 0;
@@ -10815,6 +10835,8 @@ static int __init net_dev_init(void)
 	debugfs_create_u32("tapi_break_max", 0666, NULL, &TAPI_BREAK_MAX);
 	debugfs_create_bool("tapi_polling", 0666, NULL, &TAPI_POLLING);
 	debugfs_create_u32("tapi_max_idle", 0666, NULL, &TAPI_IDLE_MUL_MAX);
+	debugfs_create_u64("tapi_cnt_local", 0666, NULL, &TAPI_CNT_LOCAL);
+	debugfs_create_u64("tapi_cnt_steal", 0666, NULL, &TAPI_CNT_STEAL);
 
 	if (dev_proc_init())
 		goto out;
