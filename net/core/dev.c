@@ -6627,11 +6627,6 @@ static enum hrtimer_restart napi_watchdog(struct hrtimer *timer)
 
 	napi = container_of(timer, struct napi_struct, timer);
 
-	if (napi->thread) {
-		wake_up_process(napi->thread);
-		return HRTIMER_NORESTART;
-	}
-
 	/* Note : we use a relaxed variant of napi_schedule_prep() not setting
 	 * NAPI_STATE_MISSED, since we do not react to a device IRQ.
 	 */
@@ -6890,10 +6885,31 @@ static struct napi_struct *find_ripe_napi(struct net_device *dev)
 	return most_ripe;
 }
 
+struct tapi_timer_wrap {
+	struct hrtimer timer;
+	struct task_struct *thread;
+};
+
+static enum hrtimer_restart tapi_watchdog(struct hrtimer *timer)
+{
+	struct tapi_timer_wrap *tt;
+
+	tt = container_of(timer, struct tapi_timer_wrap, timer);
+	wake_up_process(tt->thread);
+
+	return HRTIMER_NORESTART;
+}
+
 static int thread_dev_tapi(void *data)
 {
 	struct net_device *dev = data;
+	struct tapi_timer_wrap tt;
 	u32 idle;
+
+	hrtimer_init_on_stack(&tt.timer,
+			      CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED);
+	tt.timer.function = tapi_watchdog;
+	tt.thread = current;
 
 	while (!kthread_should_stop()) {
 		struct napi_struct *napi;
@@ -6905,10 +6921,11 @@ static int thread_dev_tapi(void *data)
 			idle = idle >= TAPI_IDLE_MUL_MAX ? idle : idle + 1;
 			trace_napi_poller_exit(idle);
 
-			if (TAPI_BREAK_PREC_NS) {
+			if (TAPI_BREAK_PREC_NS && idle < 3) {
 				set_current_state(TASK_INTERRUPTIBLE);
-				hrtimer_start(&napi->timer,
-					      ns_to_ktime(TAPI_BREAK_PREC_NS),
+				hrtimer_start(&tt.timer,
+					      ns_to_ktime(idle *
+							  TAPI_BREAK_PREC_NS),
 					      HRTIMER_MODE_REL_PINNED);
 				schedule();
 				__set_current_state(TASK_RUNNING);
@@ -6948,6 +6965,8 @@ static int thread_dev_tapi(void *data)
 			trace_napi_poller_enter(0);
 		}
 	}
+
+	hrtimer_cancel(&tt.timer);
 
 	return 0;
 }
@@ -10849,7 +10868,8 @@ static int __init net_dev_init(void)
 			   &TAPI_LOCAL_BIAS_TIME_NS);
 	debugfs_create_u32("tapi_unready_ns", 0666, NULL,
 			   &TAPI_UNREADY_TIME_NS);
-	debugfs_create_u32("tapi_break_prec", 0666, NULL, &TAPI_BREAK_PREC_NS);
+	debugfs_create_u32("tapi_break_prec_ns", 0666, NULL,
+			   &TAPI_BREAK_PREC_NS);
 	debugfs_create_u32("tapi_break_min", 0666, NULL, &TAPI_BREAK_MIN);
 	debugfs_create_u32("tapi_break_max", 0666, NULL, &TAPI_BREAK_MAX);
 	debugfs_create_bool("tapi_polling", 0666, NULL, &TAPI_POLLING);
