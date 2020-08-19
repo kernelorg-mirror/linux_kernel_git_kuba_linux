@@ -6262,6 +6262,8 @@ u32 TAPI_BREAK_MIN = 50;
 u32 TAPI_BREAK_MAX = 100;
 u32 TAPI_IDLE_MUL_MAX = 10;
 
+u32 TAPI_BREAK_PREC_NS; /* Set to non-zero ns count to activate */
+
 u64 TAPI_CNT_LOCAL;
 u64 TAPI_CNT_STEAL;
 
@@ -6625,6 +6627,11 @@ static enum hrtimer_restart napi_watchdog(struct hrtimer *timer)
 
 	napi = container_of(timer, struct napi_struct, timer);
 
+	if (napi->thread) {
+		wake_up_process(napi->thread);
+		return HRTIMER_NORESTART;
+	}
+
 	/* Note : we use a relaxed variant of napi_schedule_prep() not setting
 	 * NAPI_STATE_MISSED, since we do not react to a device IRQ.
 	 */
@@ -6897,8 +6904,18 @@ static int thread_dev_tapi(void *data)
 		if (!napi) {
 			idle = idle >= TAPI_IDLE_MUL_MAX ? idle : idle + 1;
 			trace_napi_poller_exit(idle);
-			usleep_range(idle * TAPI_BREAK_MIN,
-				     idle * TAPI_BREAK_MAX);
+
+			if (TAPI_BREAK_PREC_NS) {
+				set_current_state(TASK_INTERRUPTIBLE);
+				hrtimer_start(&napi->timer,
+					      ns_to_ktime(TAPI_BREAK_PREC_NS),
+					      HRTIMER_MODE_REL_PINNED);
+				schedule();
+				__set_current_state(TASK_RUNNING);
+			} else {
+				usleep_range(idle * TAPI_BREAK_MIN,
+					     idle * TAPI_BREAK_MAX);
+			}
 			trace_napi_poller_enter(idle);
 			continue;
 		} else {
@@ -10828,9 +10845,11 @@ static int __init net_dev_init(void)
 
 	BUG_ON(!dev_boot_phase);
 
-	debugfs_create_u32("tapi_local_bias", 0666, NULL,
+	debugfs_create_u32("tapi_local_bias_ns", 0666, NULL,
 			   &TAPI_LOCAL_BIAS_TIME_NS);
-	debugfs_create_u32("tapi_unready", 0666, NULL, &TAPI_UNREADY_TIME_NS);
+	debugfs_create_u32("tapi_unready_ns", 0666, NULL,
+			   &TAPI_UNREADY_TIME_NS);
+	debugfs_create_u32("tapi_break_prec", 0666, NULL, &TAPI_BREAK_PREC_NS);
 	debugfs_create_u32("tapi_break_min", 0666, NULL, &TAPI_BREAK_MIN);
 	debugfs_create_u32("tapi_break_max", 0666, NULL, &TAPI_BREAK_MAX);
 	debugfs_create_bool("tapi_polling", 0666, NULL, &TAPI_POLLING);
