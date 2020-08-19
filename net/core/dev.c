@@ -6873,7 +6873,8 @@ static struct napi_struct *find_ripe_napi(struct net_device *dev)
 	trace_napi_poller_select(most_ripe);
 
 	if (TAPI_POLLING &&
-	    oldest_poll < TAPI_LOCAL_BIAS_TIME_NS + TAPI_UNREADY_TIME_NS)
+	    ktime_get_ns() - oldest_poll <
+	    TAPI_LOCAL_BIAS_TIME_NS + TAPI_UNREADY_TIME_NS)
 		return NULL;
 
 	if (most_ripe->last_poll_thread == current)
