@@ -6911,7 +6911,7 @@ static int thread_dev_tapi(void *data)
 {
 	struct net_device *dev = data;
 	struct tapi_timer_wrap tt;
-	u32 idle;
+	u32 idle = 0;
 
 	hrtimer_init_on_stack(&tt.timer,
 			      CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED);
