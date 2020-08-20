@@ -6261,7 +6261,7 @@ u32 TAPI_IDLE_PENALTY_NS = 100 * 1000;
 u32 TAPI_UNREADY_TIME_NS = 45 * 1000;
 u32 TAPI_BREAK_MIN = 50;
 u32 TAPI_BREAK_MAX = 100;
-u32 TAPI_IDLE_MUL_MAX = 10;
+u32 TAPI_IDLE_MAX = 25 * 1000;
 
 /* Set to non-zero to activate */
 s64 TAPI_BUSY_WAIT_THRS;
@@ -6968,19 +6968,22 @@ static int thread_dev_tapi(void *data)
 					      HRTIMER_MODE_REL_PINNED);
 				schedule();
 				__set_current_state(TASK_RUNNING);
-			} else if (idle < TAPI_IDLE_MUL_MAX) {
-				trace_napi_poller_exit(idle, to, 'u');
-				idle++;
-				idle += idle >> TAPI_IDLE_MUL_SHF;
-				usleep_range(idle * TAPI_BREAK_MIN,
-					     idle * TAPI_BREAK_MAX);
 			} else {
 				int msec = idle * TAPI_BREAK_MAX / 1000;
 
-				trace_napi_poller_exit(idle, to, 'm');
 				idle++;
 				idle += idle >> TAPI_IDLE_MUL_SHF;
-				msleep_interruptible(msec ? : 1);
+				if (idle > TAPI_IDLE_MAX)
+					idle = TAPI_IDLE_MAX;
+
+				if (!msec) {
+					trace_napi_poller_exit(idle, to, 'u');
+					usleep_range(idle * TAPI_BREAK_MIN,
+						     idle * TAPI_BREAK_MAX);
+				} else {
+					trace_napi_poller_exit(idle, to, 'm');
+					msleep_interruptible(msec);
+				}
 			}
 			trace_napi_poller_enter(idle);
 			continue;
@@ -10915,6 +10918,7 @@ static int __init net_dev_init(void)
 
 	debugfs_create_u32("tapi_idle_mul_shf", 0666, NULL,
 			   &TAPI_IDLE_MUL_SHF);
+	debugfs_create_u32("tapi_max_idle", 0666, NULL, &TAPI_IDLE_MAX);
 	debugfs_create_u32("tapi_wa_latency_ns", 0666, NULL,
 			   &TAPI_WA_LATENCY_NS);
 	debugfs_create_u32("tapi_idle_penalty_ns", 0666, NULL,
@@ -10932,7 +10936,6 @@ static int __init net_dev_init(void)
 	debugfs_create_u32("tapi_break_min", 0666, NULL, &TAPI_BREAK_MIN);
 	debugfs_create_u32("tapi_break_max", 0666, NULL, &TAPI_BREAK_MAX);
 	debugfs_create_bool("tapi_polling", 0666, NULL, &TAPI_POLLING);
-	debugfs_create_u32("tapi_max_idle", 0666, NULL, &TAPI_IDLE_MUL_MAX);
 	debugfs_create_u64("tapi_cnt_local", 0666, NULL, &TAPI_CNT_LOCAL);
 	debugfs_create_u64("tapi_cnt_steal", 0666, NULL, &TAPI_CNT_STEAL);
 
