@@ -6856,7 +6856,7 @@ find_ripe_napi(struct net_device *dev, bool from_idle, s64 *to)
 	bool has_locals = false;
 	u64 now;
 
-	*to = TAPI_BREAK_PREC_NS;
+	*to = TAPI_BREAK_PREC_NS ? : TAPI_BREAK_MIN * 1000;
 
 	list_for_each_entry(napi, &dev->napi_list, dev_list) {
 		u64 biased_time;
