@@ -50,7 +50,7 @@ TRACE_EVENT(napi_poller_enter,
 		__entry->idle = idle;
 	),
 
-	TP_printk("napi poll thread woken (idle %d)", __entry->idle)
+	TP_printk("idle %d", __entry->idle)
 );
 
 TRACE_EVENT(napi_poller_select,
@@ -71,26 +71,28 @@ TRACE_EVENT(napi_poller_select,
 		__entry->local = napi->last_poll_thread == current;
 	),
 
-	TP_printk("napi poll thread %p (age %d local %d)",
+	TP_printk("napi struct %p (age %d local %d)",
 		  __entry->napi, __entry->since_poll, __entry->local)
 );
 
 TRACE_EVENT(napi_poller_exit,
 
-	TP_PROTO(int idle),
+	TP_PROTO(int idle, s64 time_to_sleep),
 
-	TP_ARGS(idle),
+	    TP_ARGS(idle, time_to_sleep),
 
 	TP_STRUCT__entry(
 		__field(	int,			idle)
+		__field(	s64,			to)
 	),
 
 	TP_fast_assign(
 		__entry->idle = idle;
+		__entry->to = time_to_sleep;
 	),
 
-	TP_printk("napi poll thread done (idle %d)",
-		  __entry->idle)
+	TP_printk("idle %d, next in %lld",
+		  __entry->idle, __entry->to)
 );
 
 #undef NO_DEV

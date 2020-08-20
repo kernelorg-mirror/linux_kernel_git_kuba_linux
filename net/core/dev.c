@@ -6262,7 +6262,9 @@ u32 TAPI_BREAK_MIN = 50;
 u32 TAPI_BREAK_MAX = 100;
 u32 TAPI_IDLE_MUL_MAX = 10;
 
-u32 TAPI_BREAK_PREC_NS; /* Set to non-zero ns count to activate */
+/* Set to non-zero to activate */
+s64 TAPI_BUSY_WAIT_THRS;
+u32 TAPI_BREAK_PREC_NS;
 
 u64 TAPI_CNT_LOCAL;
 u64 TAPI_CNT_STEAL;
@@ -6843,10 +6845,12 @@ static int napi_threaded_poll(void *data)
 	return 0;
 }
 
-static struct napi_struct *find_ripe_napi(struct net_device *dev)
+static struct napi_struct *find_ripe_napi(struct net_device *dev, s64 *to)
 {
 	struct napi_struct *napi, *most_ripe = NULL;
 	u64 oldest_poll = U64_MAX;
+
+	*to = TAPI_BREAK_PREC_NS;
 
 	list_for_each_entry(napi, &dev->napi_list, dev_list) {
 		u64 biased_time;
@@ -6872,10 +6876,12 @@ static struct napi_struct *find_ripe_napi(struct net_device *dev)
 
 	trace_napi_poller_select(most_ripe);
 
-	if (TAPI_POLLING &&
-	    ktime_get_ns() - oldest_poll <
-	    TAPI_LOCAL_BIAS_TIME_NS + TAPI_UNREADY_TIME_NS)
-		return NULL;
+	if (TAPI_POLLING) {
+		*to = oldest_poll + TAPI_LOCAL_BIAS_TIME_NS + TAPI_UNREADY_TIME_NS - ktime_get_ns();
+		*to /= 1000;
+		if (*to > 0)
+			return NULL;
+	}
 
 	if (most_ripe->last_poll_thread == current)
 		TAPI_CNT_LOCAL++;
@@ -6915,13 +6921,16 @@ static int thread_dev_tapi(void *data)
 		struct napi_struct *napi;
 		bool repoll;
 		void *have;
+		s64 to;
 
-		napi = find_ripe_napi(dev);
+		napi = find_ripe_napi(dev, &to);
 		if (!napi) {
 			idle = idle >= TAPI_IDLE_MUL_MAX ? idle : idle + 1;
-			trace_napi_poller_exit(idle);
+			trace_napi_poller_exit(idle, to);
 
-			if (TAPI_BREAK_PREC_NS && idle < 3) {
+			if (to < TAPI_BUSY_WAIT_THRS && idle == 1) {
+				udelay(to);
+			} else if (TAPI_BREAK_PREC_NS && idle < 3) {
 				set_current_state(TASK_INTERRUPTIBLE);
 				hrtimer_start(&tt.timer,
 					      ns_to_ktime(idle *
@@ -6960,7 +6969,7 @@ static int thread_dev_tapi(void *data)
 		clear_bit(NAPI_STATE_CLAIMED, &napi->state);
 
 		if (need_resched()) {
-			trace_napi_poller_exit(0);
+			trace_napi_poller_exit(0, 0);
 			cond_resched();
 			trace_napi_poller_enter(0);
 		}
@@ -10870,6 +10879,8 @@ static int __init net_dev_init(void)
 			   &TAPI_UNREADY_TIME_NS);
 	debugfs_create_u32("tapi_break_prec_ns", 0666, NULL,
 			   &TAPI_BREAK_PREC_NS);
+	debugfs_create_u64("tapi_busy_wait_max", 0666, NULL,
+			   &TAPI_BUSY_WAIT_THRS);
 	debugfs_create_u32("tapi_break_min", 0666, NULL, &TAPI_BREAK_MIN);
 	debugfs_create_u32("tapi_break_max", 0666, NULL, &TAPI_BREAK_MAX);
 	debugfs_create_bool("tapi_polling", 0666, NULL, &TAPI_POLLING);
