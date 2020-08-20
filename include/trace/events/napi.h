@@ -103,17 +103,18 @@ TRACE_EVENT(napi_poller_exit,
 
 	TP_STRUCT__entry(
 		__field(	int,			idle)
-		__field(	char,			wait_type)
+		__array(	char,			wait_type, 2)
 		__field(	s64,			to)
 	),
 
 	TP_fast_assign(
 		__entry->idle = idle;
 		__entry->to = time_to_sleep;
-		__entry->wait_type = c;
+		__entry->wait_type[0] = c;
+		__entry->wait_type[1] = 0;
 	),
 
-	TP_printk("idle %d, next in %lld (wait_type %c)",
+	TP_printk("idle %d, next in %lld (wait_type %s)",
 		  __entry->idle, __entry->to, __entry->wait_type)
 );
 
