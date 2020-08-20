@@ -6858,7 +6858,7 @@ find_ripe_napi(struct net_device *dev, bool from_idle, s64 *to)
 	bool has_locals = false;
 	u64 now;
 
-	*to = U32_MAX * 128;
+	*to = 0;
 
 	list_for_each_entry(napi, &dev->napi_list, dev_list) {
 		u64 biased_time;
@@ -6895,8 +6895,10 @@ find_ripe_napi(struct net_device *dev, bool from_idle, s64 *to)
 			u64 avg_lat = now - sum / cnt;
 
 			trace_napi_poller_avg_lat(avg_lat);
-			if (avg_lat < TAPI_WA_LATENCY_NS)
+			if (avg_lat < TAPI_WA_LATENCY_NS) {
+				*to = TAPI_WA_LATENCY_NS - avg_lat;
 				return NULL;
+			}
 		}
 
 		*to = oldest_poll
@@ -6952,13 +6954,13 @@ static int thread_dev_tapi(void *data)
 		if (!napi) {
 			u32 to = (u32)to_ns / 1000;
 
-			if (to < TAPI_BUSY_WAIT_THRS && idle == 0) {
+			if (to && to < TAPI_BUSY_WAIT_THRS && idle == 0) {
 				trace_napi_poller_exit(idle, to, 'b');
 				udelay(to);
-			} else if (to < TAPI_NO_SLEEP_THRS && idle == 0) {
+			} else if (to && to < TAPI_NO_SLEEP_THRS && idle == 0) {
 				trace_napi_poller_exit(idle, to, 's');
 				schedule();
-			} else if (TAPI_POLLING && TAPI_BREAK_PREC &&
+			} else if (to && TAPI_POLLING && TAPI_BREAK_PREC &&
 				   idle < 2) {
 				trace_napi_poller_exit(idle, to, 'h');
 
