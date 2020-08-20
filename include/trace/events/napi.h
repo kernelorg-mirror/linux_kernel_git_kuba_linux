@@ -55,44 +55,66 @@ TRACE_EVENT(napi_poller_enter,
 
 TRACE_EVENT(napi_poller_select,
 
-	TP_PROTO(struct napi_struct *napi),
+	    TP_PROTO(struct napi_struct *napi, u64 now, int from_idle),
 
-	TP_ARGS(napi),
+	    TP_ARGS(napi, now, from_idle),
 
 	TP_STRUCT__entry(
 		__field(	struct napi_struct *,	napi)
 		__field(	int,			since_poll)
 		__field(	int,			local)
+		__field(	int,			from_idle)
 	),
 
 	TP_fast_assign(
 		__entry->napi = napi;
-		__entry->since_poll = ktime_get_ns() - napi->last_poll;
+		__entry->since_poll = now - napi->last_poll;
 		__entry->local = napi->last_poll_thread == current;
+		__entry->from_idle = from_idle;
 	),
 
-	TP_printk("napi struct %p (age %d local %d)",
-		  __entry->napi, __entry->since_poll, __entry->local)
+	TP_printk("napi struct %p (age %d local %d from_idle %d)",
+		  __entry->napi, __entry->since_poll, __entry->local,
+		  __entry->from_idle)
+);
+
+TRACE_EVENT(napi_poller_avg_lat,
+
+	TP_PROTO(int avg_lat),
+
+	TP_ARGS(avg_lat),
+
+	TP_STRUCT__entry(
+		__field(	int,			avg_lat)
+	),
+
+	TP_fast_assign(
+		__entry->avg_lat = avg_lat;
+	),
+
+	TP_printk("avg_lat %d", __entry->avg_lat)
 );
 
 TRACE_EVENT(napi_poller_exit,
 
-	TP_PROTO(int idle, s64 time_to_sleep),
+	    TP_PROTO(int idle, s64 time_to_sleep, char c),
 
-	    TP_ARGS(idle, time_to_sleep),
+	    TP_ARGS(idle, time_to_sleep, c),
 
 	TP_STRUCT__entry(
 		__field(	int,			idle)
+		__field(	char,			wait_type)
 		__field(	s64,			to)
 	),
 
 	TP_fast_assign(
 		__entry->idle = idle;
 		__entry->to = time_to_sleep;
+		__entry->wait_type = c;
 	),
 
-	TP_printk("idle %d, next in %lld",
-		  __entry->idle, __entry->to)
+	TP_printk("idle %d, next in %lld (wait_type %c)",
+		  __entry->idle, __entry->to, __entry->wait_type)
 );
 
 #undef NO_DEV
