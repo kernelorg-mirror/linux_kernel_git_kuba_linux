@@ -6264,6 +6264,7 @@ u32 TAPI_IDLE_MUL_MAX = 10;
 
 /* Set to non-zero to activate */
 s64 TAPI_BUSY_WAIT_THRS;
+s64 TAPI_NO_SLEEP_THRS;
 u32 TAPI_BREAK_PREC_NS;
 
 u64 TAPI_CNT_LOCAL;
@@ -6930,6 +6931,8 @@ static int thread_dev_tapi(void *data)
 
 			if (to < TAPI_BUSY_WAIT_THRS && idle == 1) {
 				udelay(to);
+			} else if (to < TAPI_NO_SLEEP_THRS && idle == 1) {
+				schedule();
 			} else if (TAPI_BREAK_PREC_NS && idle < 3) {
 				set_current_state(TASK_INTERRUPTIBLE);
 				hrtimer_start(&tt.timer,
@@ -10881,6 +10884,8 @@ static int __init net_dev_init(void)
 			   &TAPI_BREAK_PREC_NS);
 	debugfs_create_u64("tapi_busy_wait_max", 0666, NULL,
 			   &TAPI_BUSY_WAIT_THRS);
+	debugfs_create_u64("tapi_no_sleep_max", 0666, NULL,
+			   &TAPI_NO_SLEEP_THRS);
 	debugfs_create_u32("tapi_break_min", 0666, NULL, &TAPI_BREAK_MIN);
 	debugfs_create_u32("tapi_break_max", 0666, NULL, &TAPI_BREAK_MAX);
 	debugfs_create_bool("tapi_polling", 0666, NULL, &TAPI_POLLING);
