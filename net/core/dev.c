@@ -6268,6 +6268,7 @@ s64 TAPI_BUSY_WAIT_THRS;
 s64 TAPI_NO_SLEEP_THRS;
 u32 TAPI_BREAK_PREC_NS;
 u32 TAPI_WA_LATENCY_NS;
+u32 TAPI_IDLE_MUL_SHF = 30;
 
 u64 TAPI_CNT_LOCAL;
 u64 TAPI_CNT_STEAL;
@@ -6959,6 +6960,7 @@ static int thread_dev_tapi(void *data)
 				trace_napi_poller_exit(idle, to, 'h');
 
 				idle++;
+				idle += idle >> TAPI_IDLE_MUL_SHF;
 				set_current_state(TASK_INTERRUPTIBLE);
 				hrtimer_start(&tt.timer,
 					      ns_to_ktime(idle *
@@ -6969,6 +6971,7 @@ static int thread_dev_tapi(void *data)
 			} else if (idle < TAPI_IDLE_MUL_MAX) {
 				trace_napi_poller_exit(idle, to, 'u');
 				idle++;
+				idle += idle >> TAPI_IDLE_MUL_SHF;
 				usleep_range(idle * TAPI_BREAK_MIN,
 					     idle * TAPI_BREAK_MAX);
 			} else {
@@ -6976,6 +6979,7 @@ static int thread_dev_tapi(void *data)
 
 				trace_napi_poller_exit(idle, to, 'm');
 				idle++;
+				idle += idle >> TAPI_IDLE_MUL_SHF;
 				msleep_interruptible(msec ? : 1);
 			}
 			trace_napi_poller_enter(idle);
@@ -10909,6 +10913,8 @@ static int __init net_dev_init(void)
 
 	BUG_ON(!dev_boot_phase);
 
+	debugfs_create_u32("tapi_idle_mul_shf", 0666, NULL,
+			   &TAPI_IDLE_MUL_SHF);
 	debugfs_create_u32("tapi_wa_latency_ns", 0666, NULL,
 			   &TAPI_WA_LATENCY_NS);
 	debugfs_create_u32("tapi_idle_penalty_ns", 0666, NULL,
