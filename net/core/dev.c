@@ -6269,9 +6269,13 @@ s64 TAPI_NO_SLEEP_THRS;
 u32 TAPI_WA_LATENCY_NS;
 u32 TAPI_IDLE_MUL_SHF = 30;
 
-u64 TAPI_CNT_LOCAL;
-u64 TAPI_CNT_STEAL;
-u64 TAPI_CNT_UTGT;
+struct tapi_stats {
+	u64 local;
+	u64 steal;
+	u64 utgt;
+};
+
+static DEFINE_PER_CPU_ALIGNED(struct tapi_stats, tapi_stats) = {};
 
 bool TAPI_POLLING = false;
 bool TAPI_BREAK_PREC;
@@ -6917,9 +6921,9 @@ find_ripe_napi(struct tapi_timer_wrap *tt, struct net_device *dev,
 	}
 
 	if (most_ripe->last_poll_thread == tt->thread)
-		TAPI_CNT_LOCAL++;
+		this_cpu_inc(tapi_stats.local);
 	else
-		TAPI_CNT_STEAL++;
+		this_cpu_inc(tapi_stats.steal);
 
 	return most_ripe;
 }
@@ -6984,7 +6988,7 @@ static int thread_dev_tapi(void *data)
 					u32 max_us = idle * TAPI_BREAK_MAX;
 
 					if (min_us < to) {
-						TAPI_CNT_UTGT++;
+						this_cpu_inc(tapi_stats.utgt);
 						min_us = to;
 						if (max_us < to)
 							max_us = to + 10;
@@ -10918,6 +10922,51 @@ static struct pernet_operations __net_initdata default_device_ops = {
  *
  */
 
+static int tapi_stats_show(struct seq_file *file, void *data)
+{
+	struct tapi_stats stats = {};
+	int i;
+
+	for_each_possible_cpu(i) {
+		/* TODO: syncp */
+
+		stats.local += per_cpu(tapi_stats, i).local;
+		stats.steal += per_cpu(tapi_stats, i).steal;
+		stats.utgt += per_cpu(tapi_stats, i).utgt;
+	}
+
+	seq_printf(file, "local:   %lld\n", stats.local);
+	seq_printf(file, "steal:   %lld\n", stats.steal);
+	seq_printf(file, "utgt:    %lld\n", stats.utgt);
+
+	return 0;
+}
+
+static ssize_t tapi_stats_reset(struct file *file, const char __user *data,
+				size_t count, loff_t *ppos)
+{
+	int i;
+
+	for_each_possible_cpu(i)
+		memset(&per_cpu(tapi_stats, i), 0, sizeof(struct tapi_stats));
+
+	return count;
+}
+
+static int tapi_stats_open(struct inode *inode, struct file *file)
+{
+        return single_open(file, tapi_stats_show, inode->i_private);
+}
+
+static const struct file_operations tapi_stats_fops = {
+	.owner          = THIS_MODULE,
+	.open           = tapi_stats_open,
+	.read           = seq_read,
+	.write		= tapi_stats_reset,
+	.llseek         = seq_lseek,
+	.release        = single_release,
+};
+
 /*
  *       This is called single threaded during boot, so no need
  *       to take the rtnl semaphore.
@@ -10948,9 +10997,8 @@ static int __init net_dev_init(void)
 	debugfs_create_u32("tapi_break_min", 0666, NULL, &TAPI_BREAK_MIN);
 	debugfs_create_u32("tapi_break_max", 0666, NULL, &TAPI_BREAK_MAX);
 	debugfs_create_bool("tapi_polling", 0666, NULL, &TAPI_POLLING);
-	debugfs_create_u64("tapi_cnt_local", 0666, NULL, &TAPI_CNT_LOCAL);
-	debugfs_create_u64("tapi_cnt_steal", 0666, NULL, &TAPI_CNT_STEAL);
-	debugfs_create_u64("tapi_cnt_utgt", 0666, NULL, &TAPI_CNT_UTGT);
+
+	debugfs_create_file("tapi_cnt", 0666, NULL, NULL, &tapi_stats_fops);
 
 	if (dev_proc_init())
 		goto out;
