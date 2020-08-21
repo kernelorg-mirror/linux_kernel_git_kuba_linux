@@ -6271,7 +6271,6 @@ u32 TAPI_IDLE_MUL_SHF = 30;
 
 bool TAPI_POLLING;
 bool TAPI_BREAK_PREC;
-bool TAPI_RESCHED_UNCLAIM;
 
 #include <linux/average.h>
 DECLARE_EWMA(tapi_avg_lat, 16, 1024);
@@ -6866,22 +6865,6 @@ struct tapi_timer_wrap {
 	struct task_struct *thread;
 };
 
-static void
-tapi_unclaim_local(struct tapi_timer_wrap *tt, struct net_device *dev)
-{
-	struct napi_struct *napi;
-
-	list_for_each_entry(napi, &dev->napi_list, dev_list) {
-		/* if TAPI_POLLING is set SCHED is never cleared */
-		if (test_bit(NAPI_STATE_CLAIMED, &napi->state))
-			continue;
-
-		/* don't bother with atomicity, this is a hint */
-		if (napi->last_poll_thread == tt->thread)
-			WRITE_ONCE(napi->last_poll_thread, NULL);
-	}
-}
-
 static struct napi_struct *
 find_ripe_napi(struct tapi_timer_wrap *tt, struct net_device *dev,
 	       bool from_idle, s64 *to, u64 *now)
@@ -7075,8 +7058,6 @@ static int thread_dev_tapi(void *data)
 
 		if (need_resched()) {
 			trace_napi_poller_exit(0, 0, 'R');
-			if (TAPI_RESCHED_UNCLAIM)
-				tapi_unclaim_local(&tt, dev);
 			cond_resched();
 			trace_napi_poller_enter(0);
 		}
@@ -11059,8 +11040,6 @@ static int __init net_dev_init(void)
 	debugfs_create_u32("tapi_break_min", 0666, NULL, &TAPI_BREAK_MIN);
 	debugfs_create_u32("tapi_break_max", 0666, NULL, &TAPI_BREAK_MAX);
 	debugfs_create_bool("tapi_polling", 0666, NULL, &TAPI_POLLING);
-	debugfs_create_bool("tapi_resched_unclaim", 0666, NULL,
-			    &TAPI_RESCHED_UNCLAIM);
 
 	debugfs_create_file("tapi_cnt", 0666, NULL, NULL, &tapi_stats_fops);
 
