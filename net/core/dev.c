@@ -6965,7 +6965,6 @@ static int thread_dev_tapi(void *data)
 				trace_napi_poller_exit(idle, to, 'h');
 
 				idle++;
-				idle += idle >> TAPI_IDLE_MUL_SHF;
 				set_current_state(TASK_INTERRUPTIBLE);
 				hrtimer_start(&tt.timer, to_ns + 500,
 					      HRTIMER_MODE_REL_PINNED);
