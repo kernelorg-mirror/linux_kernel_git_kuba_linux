@@ -6273,11 +6273,16 @@ bool TAPI_POLLING;
 bool TAPI_BREAK_PREC;
 bool TAPI_RESCHED_UNCLAIM;
 
+#include <linux/average.h>
+DECLARE_EWMA(tapi_avg_lat, 26, 128);
+
 struct tapi_stats {
 	u64 local;
 	u64 claim;
 	u64 steal;
 	u64 utgt;
+	struct ewma_tapi_avg_lat avg_lat;
+	u64 max_lat;
 };
 
 static DEFINE_PER_CPU_ALIGNED(struct tapi_stats, tapi_stats) = {};
@@ -6879,12 +6884,11 @@ tapi_unclaim_local(struct tapi_timer_wrap *tt, struct net_device *dev)
 
 static struct napi_struct *
 find_ripe_napi(struct tapi_timer_wrap *tt, struct net_device *dev,
-	       bool from_idle, s64 *to)
+	       bool from_idle, s64 *to, u64 *now)
 {
 	struct napi_struct *napi, *most_ripe = NULL;
 	u64 oldest_poll = U64_MAX, sum = 0, cnt = 0;
 	bool has_locals = false;
-	u64 now;
 
 	*to = 0;
 
@@ -6917,12 +6921,12 @@ find_ripe_napi(struct tapi_timer_wrap *tt, struct net_device *dev,
 	if (!most_ripe)
 		return NULL;
 
-	now = ktime_get_ns();
-	trace_napi_poller_select(most_ripe, now, from_idle);
+	*now = ktime_get_ns();
+	trace_napi_poller_select(most_ripe, *now, from_idle);
 
 	if (TAPI_POLLING) {
 		if (!has_locals && TAPI_WA_LATENCY_NS) {
-			u64 avg_lat = now - sum / cnt;
+			u64 avg_lat = *now - sum / cnt;
 
 			trace_napi_poller_avg_lat(avg_lat);
 			if (avg_lat < TAPI_WA_LATENCY_NS) {
@@ -6935,7 +6939,7 @@ find_ripe_napi(struct tapi_timer_wrap *tt, struct net_device *dev,
 			+ TAPI_LOCAL_BIAS_TIME_NS
 			+ TAPI_UNREADY_TIME_NS
 			+ from_idle * TAPI_IDLE_PENALTY_NS
-			- now;
+			- *now;
 		if (*to > 0)
 			return NULL;
 	}
@@ -6960,6 +6964,23 @@ static enum hrtimer_restart tapi_watchdog(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
+static void tapi_lat_stats(struct tapi_timer_wrap *tt, struct napi_struct *napi,
+			   u64 now)
+{
+	struct tapi_stats *ts;
+	int cpu;
+	u64 lat;
+
+	lat = now - napi->last_poll;
+
+	cpu = get_cpu();
+	ts = per_cpu_ptr(&tapi_stats, cpu);
+	ewma_tapi_avg_lat_add(&ts->avg_lat, lat);
+	if (lat > ts->max_lat)
+		ts->max_lat = lat;
+	put_cpu();
+}
+
 static int thread_dev_tapi(void *data)
 {
 	struct net_device *dev = data;
@@ -6976,8 +6997,9 @@ static int thread_dev_tapi(void *data)
 		bool repoll;
 		void *have;
 		s64 to_ns;
+		u64 now;
 
-		napi = find_ripe_napi(&tt, dev, idle, &to_ns);
+		napi = find_ripe_napi(&tt, dev, idle, &to_ns, &now);
 		if (!napi) {
 			u32 to = (u32)to_ns / 1000;
 
@@ -7031,6 +7053,8 @@ static int thread_dev_tapi(void *data)
 
 		if (test_and_set_bit(NAPI_STATE_CLAIMED, &napi->state))
 			continue;
+
+		tapi_lat_stats(&tt, napi, now);
 
 		do {
 			repoll = false;
@@ -10947,22 +10971,33 @@ static struct pernet_operations __net_initdata default_device_ops = {
 
 static int tapi_stats_show(struct seq_file *file, void *data)
 {
+	unsigned long avg_lat_sum, avg_lat_cnt;
 	struct tapi_stats stats = {};
 	int i;
 
 	for_each_possible_cpu(i) {
+		unsigned long avg;
 		/* TODO: syncp */
 
 		stats.local += per_cpu(tapi_stats, i).local;
 		stats.claim += per_cpu(tapi_stats, i).claim;
 		stats.steal += per_cpu(tapi_stats, i).steal;
 		stats.utgt += per_cpu(tapi_stats, i).utgt;
+		avg = ewma_tapi_avg_lat_read(& per_cpu(tapi_stats, i).avg_lat);
+		if (avg) {
+			avg_lat_sum += avg;
+			avg_lat_cnt++;
+		}
+		if (stats.max_lat < per_cpu(tapi_stats, i).max_lat)
+			stats.max_lat = per_cpu(tapi_stats, i).max_lat;
 	}
 
 	seq_printf(file, "local:   %lld\n", stats.local);
 	seq_printf(file, "claim:   %lld\n", stats.claim);
 	seq_printf(file, "steal:   %lld\n", stats.steal);
 	seq_printf(file, "utgt:    %lld\n", stats.utgt);
+	seq_printf(file, "avg_lat: %ld\n", avg_lat_sum / avg_lat_cnt);
+	seq_printf(file, "max_lat: %lld\n", stats.max_lat);
 
 	return 0;
 }
