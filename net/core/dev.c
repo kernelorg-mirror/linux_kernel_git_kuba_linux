@@ -6274,7 +6274,7 @@ bool TAPI_BREAK_PREC;
 bool TAPI_RESCHED_UNCLAIM;
 
 #include <linux/average.h>
-DECLARE_EWMA(tapi_avg_lat, 26, 128);
+DECLARE_EWMA(tapi_avg_lat, 16, 1024);
 
 struct tapi_stats {
 	u64 local;
@@ -10972,7 +10972,7 @@ static struct pernet_operations __net_initdata default_device_ops = {
 
 static int tapi_stats_show(struct seq_file *file, void *data)
 {
-	unsigned long avg_lat_sum, avg_lat_cnt;
+	unsigned long avg_lat_sum = 0, avg_lat_cnt = 0;
 	struct tapi_stats stats = {};
 	int i;
 
@@ -10993,12 +10993,13 @@ static int tapi_stats_show(struct seq_file *file, void *data)
 			stats.max_lat = per_cpu(tapi_stats, i).max_lat;
 	}
 
-	seq_printf(file, "local:   %lld\n", stats.local);
-	seq_printf(file, "claim:   %lld\n", stats.claim);
-	seq_printf(file, "steal:   %lld\n", stats.steal);
-	seq_printf(file, "utgt:    %lld\n", stats.utgt);
-	seq_printf(file, "avg_lat: %ld\n", avg_lat_sum / avg_lat_cnt);
-	seq_printf(file, "max_lat: %lld\n", stats.max_lat);
+	seq_printf(file, "\n");
+	seq_printf(file, "local:      %lld\n", stats.local);
+	seq_printf(file, "claim:      %lld\n", stats.claim);
+	seq_printf(file, "steal:      %lld\n", stats.steal);
+	seq_printf(file, "utgt:       %lld\n", stats.utgt);
+	seq_printf(file, "avg_lat:    %ld\n", avg_lat_sum / avg_lat_cnt);
+	seq_printf(file, "max_lat:    %lld\n", stats.max_lat);
 
 	return 0;
 }
