@@ -6269,16 +6269,18 @@ s64 TAPI_NO_SLEEP_THRS;
 u32 TAPI_WA_LATENCY_NS;
 u32 TAPI_IDLE_MUL_SHF = 30;
 
+bool TAPI_POLLING;
+bool TAPI_BREAK_PREC;
+bool TAPI_RESCHED_UNCLAIM;
+
 struct tapi_stats {
 	u64 local;
+	u64 claim;
 	u64 steal;
 	u64 utgt;
 };
 
 static DEFINE_PER_CPU_ALIGNED(struct tapi_stats, tapi_stats) = {};
-
-bool TAPI_POLLING = false;
-bool TAPI_BREAK_PREC;
 
 static int process_backlog(struct napi_struct *napi, int quota)
 {
@@ -6859,6 +6861,22 @@ struct tapi_timer_wrap {
 	struct task_struct *thread;
 };
 
+static void
+tapi_unclaim_local(struct tapi_timer_wrap *tt, struct net_device *dev)
+{
+	struct napi_struct *napi;
+
+	list_for_each_entry(napi, &dev->napi_list, dev_list) {
+		/* if TAPI_POLLING is set SCHED is never cleared */
+		if (test_bit(NAPI_STATE_CLAIMED, &napi->state))
+			continue;
+
+		/* don't bother with atomicity, this is a hint */
+		if (napi->last_poll_thread == tt->thread)
+			WRITE_ONCE(napi->last_poll_thread, NULL);
+	}
+}
+
 static struct napi_struct *
 find_ripe_napi(struct tapi_timer_wrap *tt, struct net_device *dev,
 	       bool from_idle, s64 *to)
@@ -6872,6 +6890,7 @@ find_ripe_napi(struct tapi_timer_wrap *tt, struct net_device *dev,
 
 	list_for_each_entry(napi, &dev->napi_list, dev_list) {
 		u64 biased_time;
+		bool local;
 
 		/* if TAPI_POLLING is set SCHED is never cleared */
 		if (napi->state & (NAPIF_STATE_DISABLE |
@@ -6882,10 +6901,11 @@ find_ripe_napi(struct tapi_timer_wrap *tt, struct net_device *dev,
 		cnt++;
 		sum += napi->last_poll;
 
+		local = napi->last_poll_thread == tt->thread;
 		biased_time = napi->last_poll;
-		if (napi->last_poll_thread == tt->thread) {
+		if (!napi->last_poll_thread || local) {
 			biased_time -= TAPI_LOCAL_BIAS_TIME_NS;
-			has_locals = true;
+			has_locals |= local;
 		}
 
 		if (biased_time >= oldest_poll)
@@ -6922,6 +6942,8 @@ find_ripe_napi(struct tapi_timer_wrap *tt, struct net_device *dev,
 
 	if (most_ripe->last_poll_thread == tt->thread)
 		this_cpu_inc(tapi_stats.local);
+	else if (!most_ripe->last_poll_thread)
+		this_cpu_inc(tapi_stats.claim);
 	else
 		this_cpu_inc(tapi_stats.steal);
 
@@ -7029,6 +7051,7 @@ static int thread_dev_tapi(void *data)
 
 		if (need_resched()) {
 			trace_napi_poller_exit(0, 0, 'R');
+			tapi_unclaim_local(&tt, dev);
 			cond_resched();
 			trace_napi_poller_enter(0);
 		}
@@ -10931,11 +10954,13 @@ static int tapi_stats_show(struct seq_file *file, void *data)
 		/* TODO: syncp */
 
 		stats.local += per_cpu(tapi_stats, i).local;
+		stats.claim += per_cpu(tapi_stats, i).claim;
 		stats.steal += per_cpu(tapi_stats, i).steal;
 		stats.utgt += per_cpu(tapi_stats, i).utgt;
 	}
 
 	seq_printf(file, "local:   %lld\n", stats.local);
+	seq_printf(file, "claim:   %lld\n", stats.claim);
 	seq_printf(file, "steal:   %lld\n", stats.steal);
 	seq_printf(file, "utgt:    %lld\n", stats.utgt);
 
@@ -10997,6 +11022,8 @@ static int __init net_dev_init(void)
 	debugfs_create_u32("tapi_break_min", 0666, NULL, &TAPI_BREAK_MIN);
 	debugfs_create_u32("tapi_break_max", 0666, NULL, &TAPI_BREAK_MAX);
 	debugfs_create_bool("tapi_polling", 0666, NULL, &TAPI_POLLING);
+	debugfs_create_bool("tapi_resched_unclaim", 0666, NULL,
+			    &TAPI_RESCHED_UNCLAIM);
 
 	debugfs_create_file("tapi_cnt", 0666, NULL, NULL, &tapi_stats_fops);
 
