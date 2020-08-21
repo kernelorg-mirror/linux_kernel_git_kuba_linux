@@ -7075,7 +7075,8 @@ static int thread_dev_tapi(void *data)
 
 		if (need_resched()) {
 			trace_napi_poller_exit(0, 0, 'R');
-			tapi_unclaim_local(&tt, dev);
+			if (TAPI_RESCHED_UNCLAIM)
+				tapi_unclaim_local(&tt, dev);
 			cond_resched();
 			trace_napi_poller_enter(0);
 		}
