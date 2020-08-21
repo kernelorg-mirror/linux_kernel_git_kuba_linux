@@ -6850,8 +6850,14 @@ static int napi_threaded_poll(void *data)
 	return 0;
 }
 
+struct tapi_timer_wrap {
+	struct hrtimer timer;
+	struct task_struct *thread;
+};
+
 static struct napi_struct *
-find_ripe_napi(struct net_device *dev, bool from_idle, s64 *to)
+find_ripe_napi(struct tapi_timer_wrap *tt, struct net_device *dev,
+	       bool from_idle, s64 *to)
 {
 	struct napi_struct *napi, *most_ripe = NULL;
 	u64 oldest_poll = U64_MAX, sum = 0, cnt = 0;
@@ -6873,7 +6879,7 @@ find_ripe_napi(struct net_device *dev, bool from_idle, s64 *to)
 		sum += napi->last_poll;
 
 		biased_time = napi->last_poll;
-		if (napi->last_poll_thread == current) {
+		if (napi->last_poll_thread == tt->thread) {
 			biased_time -= TAPI_LOCAL_BIAS_TIME_NS;
 			has_locals = true;
 		}
@@ -6910,18 +6916,13 @@ find_ripe_napi(struct net_device *dev, bool from_idle, s64 *to)
 			return NULL;
 	}
 
-	if (most_ripe->last_poll_thread == current)
+	if (most_ripe->last_poll_thread == tt->thread)
 		TAPI_CNT_LOCAL++;
 	else
 		TAPI_CNT_STEAL++;
 
 	return most_ripe;
 }
-
-struct tapi_timer_wrap {
-	struct hrtimer timer;
-	struct task_struct *thread;
-};
 
 static enum hrtimer_restart tapi_watchdog(struct hrtimer *timer)
 {
@@ -6950,7 +6951,7 @@ static int thread_dev_tapi(void *data)
 		void *have;
 		s64 to_ns;
 
-		napi = find_ripe_napi(dev, idle, &to_ns);
+		napi = find_ripe_napi(&tt, dev, idle, &to_ns);
 		if (!napi) {
 			u32 to = (u32)to_ns / 1000;
 
