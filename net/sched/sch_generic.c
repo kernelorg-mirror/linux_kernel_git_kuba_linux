@@ -589,21 +589,43 @@ void netif_carrier_on(struct net_device *dev)
 EXPORT_SYMBOL(netif_carrier_on);
 
 /**
- *	netif_carrier_off - clear carrier
- *	@dev: network device
+ * netif_carrier_off() - clear carrier in response to a true link state event
+ * @dev: network device
  *
- * Device has detected loss of carrier.
+ * Clear carrier and stop Tx, use when device has detected loss of carrier.
  */
 void netif_carrier_off(struct net_device *dev)
 {
+	bool admin = test_bit(__LINK_STATE_NOCARRIER_LOCAL, &dev->state);
+
 	if (!test_and_set_bit(__LINK_STATE_NOCARRIER, &dev->state)) {
 		if (dev->reg_state == NETREG_UNINITIALIZED)
 			return;
 		atomic_inc(&dev->carrier_down_count);
+		if (admin)
+			WRITE_ONCE(dev->carrier_down_local,
+				   dev->carrier_down_local + 1);
 		linkwatch_fire_event(dev);
 	}
 }
 EXPORT_SYMBOL(netif_carrier_off);
+
+/**
+ * netif_carrier_admin_off() - clear carrier to reconfigure the device
+ * @dev: network device
+ *
+ * Force the carrier down, e.g. to perform device reconfiguration,
+ * reset the device after an error etc. This function should be used
+ * instead of netif_carrier_off() any time carrier goes down for reasons
+ * other that an actual link layer connection loss.
+ */
+void netif_carrier_admin_off(struct net_device *dev)
+{
+	netif_carrier_local_changes_start(dev);
+	netif_carrier_off(dev);
+	netif_carrier_local_changes_end(dev);
+}
+EXPORT_SYMBOL(netif_carrier_admin_off);
 
 /**
  *	netif_carrier_event - report carrier state event

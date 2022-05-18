@@ -310,6 +310,7 @@ enum netdev_state_t {
 	__LINK_STATE_LINKWATCH_PENDING,
 	__LINK_STATE_DORMANT,
 	__LINK_STATE_TESTING,
+	__LINK_STATE_NOCARRIER_LOCAL,
 };
 
 struct gro_list {
@@ -1766,6 +1767,8 @@ enum netdev_ml_priv_type {
  *			do not use this in drivers
  *	@carrier_up_count:	Number of times the carrier has been up
  *	@carrier_down_count:	Number of times the carrier has been down
+ *	@carrier_down_local:	Number of times the carrier has been counted as
+ *				down due to local administrative actions
  *
  *	@wireless_handlers:	List of functions to handle Wireless Extensions,
  *				instead of ioctl,
@@ -2055,6 +2058,7 @@ struct net_device {
 	/* Stats to monitor link on/off, flapping */
 	atomic_t		carrier_up_count;
 	atomic_t		carrier_down_count;
+	unsigned int		carrier_down_local;
 
 #ifdef CONFIG_WIRELESS_EXT
 	const struct iw_handler_def *wireless_handlers;
@@ -4059,8 +4063,27 @@ unsigned long dev_trans_start(struct net_device *dev);
 
 void __netdev_watchdog_up(struct net_device *dev);
 
+/**
+ * netif_carrier_local_changes_start() - enter local link reconfiguration
+ * @dev: network device
+ *
+ * Mark link as unstable due to local administrative actions. This will
+ * cause netif_carrier_off() to behave like netif_carrier_admin_off() until
+ * netif_carrier_local_changes_end() is called.
+ */
+static inline void netif_carrier_local_changes_start(struct net_device *dev)
+{
+	set_bit(__LINK_STATE_NOCARRIER_LOCAL, &dev->state);
+}
+
+static inline void netif_carrier_local_changes_end(struct net_device *dev)
+{
+	clear_bit(__LINK_STATE_NOCARRIER_LOCAL, &dev->state);
+}
+
 void netif_carrier_on(struct net_device *dev);
 void netif_carrier_off(struct net_device *dev);
+void netif_carrier_admin_off(struct net_device *dev);
 void netif_carrier_event(struct net_device *dev);
 
 /**

@@ -1092,6 +1092,7 @@ static noinline size_t if_nlmsg_size(const struct net_device *dev,
 	       + nla_total_size(4)  /* IFLA_MAX_MTU */
 	       + rtnl_prop_list_size(dev)
 	       + nla_total_size(MAX_ADDR_LEN) /* IFLA_PERM_ADDRESS */
+	       + nla_total_size(4) /* IFLA_CARRIER_DOWN_LOCAL */
 	       + 0;
 }
 
@@ -1787,7 +1788,8 @@ static int rtnl_fill_ifinfo(struct sk_buff *skb,
 	    nla_put_u32(skb, IFLA_CARRIER_UP_COUNT,
 			atomic_read(&dev->carrier_up_count)) ||
 	    nla_put_u32(skb, IFLA_CARRIER_DOWN_COUNT,
-			atomic_read(&dev->carrier_down_count)))
+			atomic_read(&dev->carrier_down_count)) ||
+	    nla_put_u32(skb, IFLA_CARRIER_DOWN_LOCAL, dev->carrier_down_local))
 		goto nla_put_failure;
 
 	if (rtnl_fill_proto_down(skb, dev))
