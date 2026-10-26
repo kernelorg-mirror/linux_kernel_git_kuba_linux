@@ -63,12 +63,13 @@ struct page *dma_common_alloc_pages(struct device *dev, size_t size,
 		dma_addr_t *dma_handle, enum dma_data_direction dir, gfp_t gfp)
 {
 	const struct dma_map_ops *ops = get_dma_ops(dev);
+	int nid = dev_to_node(dev);
 	struct page *page;
 	phys_addr_t phys;
 
-	page = dma_alloc_contiguous(dev, size, gfp);
+	page = dma_alloc_contiguous(dev, size, gfp, nid);
 	if (!page)
-		page = alloc_pages_node(dev_to_node(dev), gfp, get_order(size));
+		page = alloc_pages_node(nid, gfp, get_order(size));
 	if (!page)
 		return NULL;
 
